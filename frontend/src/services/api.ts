@@ -1,11 +1,21 @@
 import axios, { type AxiosError } from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+const rawUrl: string = (import.meta.env.VITE_API_URL || '').trim();
+let BASE_URL = 'https://taskflow-backend-czaq.onrender.com/api/v1';
+
+if (rawUrl) {
+  let cleaned = rawUrl.replace(/\/+$/, '');
+  if (!cleaned.endsWith('/api/v1')) {
+    cleaned = `${cleaned}/api/v1`;
+  }
+  BASE_URL = cleaned;
+}
 
 export const api = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
 });
+
 
 // ── Request interceptor: attach JWT ──────────────────────────────────────────
 api.interceptors.request.use((config) => {
