@@ -51,3 +51,62 @@ class InMemorySocialRepository(SocialRepository):
             key=lambda p: p.created_at,
             reverse=True,
         )
+
+
+class SQLSocialRepository(SocialRepository):
+    """Implementação real conectada ao Supabase PostgreSQL via SQLModel."""
+
+    def __init__(self) -> None:
+        from app.core.database import engine
+        self.engine = engine
+
+    async def get_by_id(self, id: str) -> Optional[SocialPost]:
+        from sqlmodel import Session
+        with Session(self.engine) as session:
+            return session.get(SocialPost, id)
+
+    async def list_all(self) -> List[SocialPost]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = select(SocialPost).order_by(SocialPost.created_at.desc())
+            return list(session.exec(statement).all())
+
+    async def save(self, post: SocialPost) -> SocialPost:
+        from sqlmodel import Session
+        with Session(self.engine) as session:
+            post.updated_at = datetime.now(timezone.utc)
+            merged = session.merge(post)
+            session.commit()
+            session.refresh(merged)
+            return merged
+
+    async def delete(self, id: str) -> bool:
+        from sqlmodel import Session
+        with Session(self.engine) as session:
+            post = session.get(SocialPost, id)
+            if post:
+                session.delete(post)
+                session.commit()
+                return True
+            return False
+
+    async def list_by_creator(self, creator_id: str) -> List[SocialPost]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = (
+                select(SocialPost)
+                .where(SocialPost.creator_id == creator_id, SocialPost.workspace == WorkspaceType.personal)
+                .order_by(SocialPost.created_at.desc())
+            )
+            return list(session.exec(statement).all())
+
+    async def list_by_enterprise(self, enterprise_id: str) -> List[SocialPost]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = (
+                select(SocialPost)
+                .where(SocialPost.enterprise_id == enterprise_id)
+                .order_by(SocialPost.created_at.desc())
+            )
+            return list(session.exec(statement).all())
+

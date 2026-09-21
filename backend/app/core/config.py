@@ -25,13 +25,20 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in v.split(",") if origin.strip()]
 
     # Storage
-    STORAGE_PROVIDER: str = "local"
+    STORAGE_PROVIDER: str = "supabase"
     UPLOAD_DIR: str = "./uploads"
 
-    # Database (for future PostgreSQL migration)
+    # Supabase
+    SUPABASE_URL: str = "https://usolirvqhubeabywdovf.supabase.co"
+    SUPABASE_ANON_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
+    SUPABASE_BUCKET: str = "taskflow-media"
+
+    # Database
     DATABASE_URL: str = "sqlite:///./taskflow_dev.db"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()
+

@@ -24,10 +24,16 @@ from app.dependencies.container import (
 
 
 async def run_seed() -> None:
+    existing_users = await user_repo.list_all()
+    if existing_users:
+        print(f"[OK] Database already initialized with {len(existing_users)} users in Supabase. Skipping seed.")
+        return
+
     now = datetime.now(timezone.utc)
 
     # ── Users ─────────────────────────────────────────────────────────────────
     admin = User(
+
         id="user-admin-001",
         name="Alex Admin",
         email="admin@taskflow.local",

@@ -58,3 +58,48 @@ class InMemoryUserRepository(UserRepository):
             self._email_index.pop(user.email.lower(), None)
             return True
         return False
+
+
+class SQLUserRepository(UserRepository):
+    """Implementação real conectada ao Supabase PostgreSQL via SQLModel."""
+
+    def __init__(self) -> None:
+        from app.core.database import engine
+        self.engine = engine
+
+    async def get_by_id(self, id: str) -> Optional[User]:
+        from sqlmodel import Session
+        with Session(self.engine) as session:
+            return session.get(User, id)
+
+    async def get_by_email(self, email: str) -> Optional[User]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = select(User).where(User.email == email.lower())
+            return session.exec(statement).first()
+
+    async def list_all(self) -> List[User]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            return list(session.exec(select(User)).all())
+
+    async def save(self, user: User) -> User:
+        from sqlmodel import Session
+        with Session(self.engine) as session:
+            user.updated_at = datetime.now(timezone.utc)
+            # Merge / Add
+            merged = session.merge(user)
+            session.commit()
+            session.refresh(merged)
+            return merged
+
+    async def delete(self, id: str) -> bool:
+        from sqlmodel import Session
+        with Session(self.engine) as session:
+            user = session.get(User, id)
+            if user:
+                session.delete(user)
+                session.commit()
+                return True
+            return False
+

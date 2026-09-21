@@ -79,3 +79,91 @@ class InMemoryEnterpriseRepository(EnterpriseRepository):
             self._members[enterprise_id] = filtered
             return True
         return False
+
+
+class SQLEnterpriseRepository(EnterpriseRepository):
+    """Implementação real conectada ao Supabase PostgreSQL via SQLModel."""
+
+    def __init__(self) -> None:
+        from app.core.database import engine
+        self.engine = engine
+
+    async def get_by_id(self, id: str) -> Optional[Enterprise]:
+        from sqlmodel import Session
+        with Session(self.engine) as session:
+            return session.get(Enterprise, id)
+
+    async def list_all(self) -> List[Enterprise]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            return list(session.exec(select(Enterprise)).all())
+
+    async def save(self, enterprise: Enterprise) -> Enterprise:
+        from sqlmodel import Session
+        with Session(self.engine) as session:
+            enterprise.updated_at = datetime.now(timezone.utc)
+            merged = session.merge(enterprise)
+            session.commit()
+            session.refresh(merged)
+            return merged
+
+    async def delete(self, id: str) -> bool:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            enterprise = session.get(Enterprise, id)
+            if enterprise:
+                members = session.exec(select(EnterpriseMember).where(EnterpriseMember.enterprise_id == id)).all()
+                for m in members:
+                    session.delete(m)
+                session.delete(enterprise)
+                session.commit()
+                return True
+            return False
+
+    async def list_by_member(self, user_id: str) -> List[Enterprise]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = (
+                select(Enterprise)
+                .join(EnterpriseMember, Enterprise.id == EnterpriseMember.enterprise_id)
+                .where(EnterpriseMember.user_id == user_id, EnterpriseMember.status == MemberStatus.active)
+            )
+            return list(session.exec(statement).all())
+
+    async def get_member(self, enterprise_id: str, user_id: str) -> Optional[EnterpriseMember]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = select(EnterpriseMember).where(
+                EnterpriseMember.enterprise_id == enterprise_id,
+                EnterpriseMember.user_id == user_id,
+            )
+            return session.exec(statement).first()
+
+    async def list_members(self, enterprise_id: str) -> List[EnterpriseMember]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = select(EnterpriseMember).where(EnterpriseMember.enterprise_id == enterprise_id)
+            return list(session.exec(statement).all())
+
+    async def save_member(self, member: EnterpriseMember) -> EnterpriseMember:
+        from sqlmodel import Session
+        with Session(self.engine) as session:
+            merged = session.merge(member)
+            session.commit()
+            session.refresh(merged)
+            return merged
+
+    async def remove_member(self, enterprise_id: str, user_id: str) -> bool:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = select(EnterpriseMember).where(
+                EnterpriseMember.enterprise_id == enterprise_id,
+                EnterpriseMember.user_id == user_id,
+            )
+            member = session.exec(statement).first()
+            if member:
+                session.delete(member)
+                session.commit()
+                return True
+            return False
+

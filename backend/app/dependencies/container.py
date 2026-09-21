@@ -4,11 +4,11 @@ All repositories and services are instantiated here as singletons.
 This is the only place where concrete implementations are wired up.
 Replace InMemory* with SQL* implementations here when migrating to PostgreSQL.
 """
-from app.repositories.user_repository import InMemoryUserRepository
-from app.repositories.task_repository import InMemoryTaskRepository
-from app.repositories.enterprise_repository import InMemoryEnterpriseRepository
-from app.repositories.chat_repository import InMemoryChatRepository
-from app.repositories.social_repository import InMemorySocialRepository
+from app.repositories.user_repository import SQLUserRepository
+from app.repositories.task_repository import SQLTaskRepository
+from app.repositories.enterprise_repository import SQLEnterpriseRepository
+from app.repositories.chat_repository import SQLChatRepository
+from app.repositories.social_repository import SQLSocialRepository
 
 from app.services.auth_service import AuthService
 from app.services.task_service import TaskService
@@ -19,12 +19,13 @@ from app.services.chat_service import ChatService
 from app.services.storage_service import get_storage_service
 from app.services.social_service import SocialService
 
-# ── Repositories (singletons for development) ────────────────────────────────
-user_repo = InMemoryUserRepository()
-task_repo = InMemoryTaskRepository()
-enterprise_repo = InMemoryEnterpriseRepository()
-chat_repo = InMemoryChatRepository()
-social_repo = InMemorySocialRepository()
+# ── Repositories (Supabase PostgreSQL) ───────────────────────────────────────
+user_repo = SQLUserRepository()
+task_repo = SQLTaskRepository()
+enterprise_repo = SQLEnterpriseRepository()
+chat_repo = SQLChatRepository()
+social_repo = SQLSocialRepository()
+
 
 # ── Services ─────────────────────────────────────────────────────────────────
 auth_service = AuthService(user_repo=user_repo)
