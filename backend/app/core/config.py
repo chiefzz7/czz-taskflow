@@ -9,6 +9,13 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
 
+    # Email (Gmail SMTP)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    FRONTEND_URL: str = "http://localhost:5173"
+
     # Security
     JWT_SECRET_KEY: str = "super-secret-change-in-production-min-32-chars"
     JWT_ALGORITHM: str = "HS256"

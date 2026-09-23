@@ -31,9 +31,14 @@ api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('taskflow_token');
-      localStorage.removeItem('taskflow_user');
-      window.location.href = '/login';
+      const url = error.config?.url ?? '';
+      // Don't redirect if the 401 came from the login/register endpoints themselves
+      const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register');
+      if (!isAuthEndpoint) {
+        localStorage.removeItem('taskflow_token');
+        localStorage.removeItem('taskflow_user');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

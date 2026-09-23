@@ -51,3 +51,24 @@ class TokenResponse(BaseModel):
 
 class AuthErrorResponse(BaseModel):
     detail: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return v.strip().lower()
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v

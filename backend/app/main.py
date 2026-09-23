@@ -6,19 +6,22 @@ from fastapi import WebSocket
 import os
 
 from app.core.config import settings
+from app.core.database import create_db_and_tables
 from app.api.routes import auth, tasks, enterprises, dashboard, reports, users, social
 from app.websocket.handlers import handle_chat_websocket
 from app.utils.seed import run_seed
+# Import all models so SQLModel.metadata knows about them and creates all tables
+import app.models.password_reset  # noqa: F401
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application startup: seed development data."""
-    # Create uploads directory for local storage first
+    """Application startup: create tables and seed development data."""
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    create_db_and_tables()  # Ensures all tables exist (including new ones like password_reset_tokens)
     await run_seed()
     yield
-    # Shutdown: nothing to clean up for in-memory storage
+    # Shutdown: nothing to clean up
 
 
 app = FastAPI(

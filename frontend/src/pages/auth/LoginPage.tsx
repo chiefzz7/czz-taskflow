@@ -27,8 +27,6 @@ export default function LoginPage() {
     }
   };
 
-  const preencherDemo = (e: string, p: string) => { setEmail(e); setPassword(p); };
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -63,7 +61,10 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Senha</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Senha</label>
+                <Link to="/forgot-password" className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Esqueci minha senha</Link>
+              </div>
               <div className="relative">
                 <input id="password" type={showPassword ? 'text' : 'password'} value={password}
                   onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password"
@@ -87,25 +88,6 @@ export default function LoginPage() {
             Não tem uma conta?{' '}
             <Link to="/register" className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium">Criar conta</Link>
           </p>
-        </div>
-
-        {/* Contas de desenvolvimento */}
-        <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl">
-          <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2">Contas de desenvolvimento</p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {[
-              { label: 'Admin', email: 'admin@taskflow.local', pass: 'Admin@123' },
-              { label: 'Gerente', email: 'manager@taskflow.local', pass: 'Manager@123' },
-              { label: 'Membro', email: 'member@taskflow.local', pass: 'Member@123' },
-              { label: 'Pessoal', email: 'user@taskflow.local', pass: 'User@123' },
-            ].map(({ label, email, pass }) => (
-              <button key={email} onClick={() => preencherDemo(email, pass)}
-                className="text-left px-2 py-1.5 rounded-md text-xs bg-white dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
-                <span className="font-medium block">{label}</span>
-                <span className="text-amber-600 dark:text-amber-500 text-[10px]">{email}</span>
-              </button>
-            ))}
-          </div>
         </div>
       </div>
     </div>
