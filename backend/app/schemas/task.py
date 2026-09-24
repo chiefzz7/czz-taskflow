@@ -13,6 +13,7 @@ class RecurrenceCreate(BaseModel):
     type: RecurrenceType
     interval: int = 1
     days_of_week: Optional[List[int]] = None
+    days_of_month: Optional[List[int]] = None
     end_date: Optional[datetime] = None
     max_occurrences: Optional[int] = None
 
@@ -22,6 +23,7 @@ class RecurrenceRead(BaseModel):
     type: RecurrenceType
     interval: int
     days_of_week: Optional[List[int]]
+    days_of_month: Optional[List[int]] = None
     end_date: Optional[datetime]
     max_occurrences: Optional[int]
 
@@ -56,6 +58,8 @@ class TaskUpdate(BaseModel):
     is_public: Optional[bool] = None
     planned_start_at: Optional[datetime] = None
     due_at: Optional[datetime] = None
+    recurrence: Optional[RecurrenceCreate] = None
+    remove_recurrence: Optional[bool] = False
 
 
 class TaskStatusUpdate(BaseModel):

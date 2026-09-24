@@ -9,9 +9,19 @@ engine = create_engine(
 )
 
 
+from sqlalchemy import text
+
+
 def create_db_and_tables() -> None:
     """Garante a criação de todas as tabelas no Supabase."""
     SQLModel.metadata.create_all(engine)
+    # Ensure days_of_month column exists on recurrences table
+    with Session(engine) as session:
+        try:
+            session.exec(text("ALTER TABLE recurrences ADD COLUMN days_of_month VARCHAR;"))
+            session.commit()
+        except Exception:
+            session.rollback()
 
 
 def get_session():

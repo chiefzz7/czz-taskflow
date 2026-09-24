@@ -22,6 +22,7 @@ class Recurrence(SQLModel, table=True):
     type: RecurrenceType
     interval: int = Field(default=1, ge=1)  # every N units
     days_of_week: Optional[str] = Field(default=None)  # JSON: [0,1,2] for Mon,Tue,Wed
+    days_of_month: Optional[str] = Field(default=None)  # JSON: [1, 10, 15] for specific days of month
     end_date: Optional[datetime] = Field(default=None)
     max_occurrences: Optional[int] = Field(default=None)
 

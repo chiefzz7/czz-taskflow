@@ -8,6 +8,7 @@ export interface Recurrence {
   type: RecurrenceType;
   interval: number;
   days_of_week: number[] | null;
+  days_of_month: number[] | null;
   end_date: string | null;
   max_occurrences: number | null;
 }
@@ -32,6 +33,8 @@ export interface Task {
   updated_at: string;
   assignee_ids: string[];
   recurrence: Recurrence | null;
+  // Optional flag for virtual calendar occurrences
+  is_recurrence_instance?: boolean;
 }
 
 export interface TaskCreate {
@@ -50,6 +53,7 @@ export interface TaskCreate {
     type: RecurrenceType;
     interval?: number;
     days_of_week?: number[] | null;
+    days_of_month?: number[] | null;
     end_date?: string | null;
     max_occurrences?: number | null;
   } | null;
@@ -65,6 +69,8 @@ export interface TaskUpdate {
   is_public?: boolean;
   planned_start_at?: string | null;
   due_at?: string | null;
+  recurrence?: TaskCreate['recurrence'];
+  remove_recurrence?: boolean;
 }
 
 export interface TaskFilters {
