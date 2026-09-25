@@ -20,8 +20,10 @@ export default function RegisterPage() {
     setIsLoading(true);
     try {
       await register(name, email, password);
-      navigate('/dashboard');
+      const redirect = new URLSearchParams(window.location.search).get('redirect') || '/dashboard';
+      navigate(redirect);
     } catch (err: unknown) {
+
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(detail ?? 'Falha no cadastro. Tente novamente.');
     } finally {

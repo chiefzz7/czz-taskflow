@@ -29,8 +29,13 @@ async def create_task(
     data: TaskCreate,
     current_user: User = Depends(get_current_user),
 ) -> TaskRead:
-    """Create a new personal task."""
+    """Create a new personal task. Guaranteed to be private to the current user."""
+    from app.models.enums import WorkspaceType
+    data.workspace = WorkspaceType.personal
+    data.enterprise_id = None
+    data.is_public = False
     return await task_service.create_task(data=data, creator_id=current_user.id)
+
 
 
 @router.get("/{task_id}", response_model=TaskRead)

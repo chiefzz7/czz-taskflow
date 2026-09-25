@@ -18,7 +18,8 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       await login(email, password);
-      navigate('/dashboard');
+      const redirect = new URLSearchParams(window.location.search).get('redirect') || '/dashboard';
+      navigate(redirect);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(msg ?? 'E-mail ou senha inválidos');
@@ -26,6 +27,7 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
@@ -86,8 +88,14 @@ export default function LoginPage() {
 
           <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
             Não tem uma conta?{' '}
-            <Link to="/register" className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium">Criar conta</Link>
+            <Link
+              to={`/register${window.location.search}`}
+              className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+            >
+              Criar conta
+            </Link>
           </p>
+
         </div>
       </div>
     </div>

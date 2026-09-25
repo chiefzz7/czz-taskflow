@@ -34,7 +34,13 @@ class AuthService:
             timezone=data.timezone,
         )
         saved = await self._repo.save(user)
+        try:
+            from app.dependencies.container import enterprise_service
+            await enterprise_service.process_user_pending_invitations(saved.id, saved.email)
+        except Exception:
+            pass
         return UserRead.model_validate(saved)
+
 
     async def login(self, data: LoginRequest) -> TokenResponse:
         user = await self._repo.get_by_email(data.email.lower())

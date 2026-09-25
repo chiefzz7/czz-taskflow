@@ -78,6 +78,10 @@ class TaskService:
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
     async def create_task(self, data: TaskCreate, creator_id: str) -> TaskRead:
+        if data.workspace == WorkspaceType.personal:
+            data.enterprise_id = None
+            data.is_public = False
+
         recurrence_id = None
         if data.recurrence:
             rec = Recurrence(
@@ -114,11 +118,12 @@ class TaskService:
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
 
-        # Authorization check
+        # Strict authorization check for personal tasks
         if task.workspace == WorkspaceType.personal and task.creator_id != user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail="Acesso negado. Esta tarefa pessoal é estritamente privada.")
 
         return await self._get_task_read(task)
+
 
     async def list_personal_tasks(
         self,
@@ -165,8 +170,12 @@ class TaskService:
         task = await self._repo.get_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-        if task.creator_id != user_id and task.responsible_id != user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+        if task.workspace == WorkspaceType.personal:
+            if task.creator_id != user_id:
+                raise HTTPException(status_code=403, detail="Acesso negado. Esta tarefa pessoal é estritamente privada.")
+        else:
+            if task.creator_id != user_id and task.responsible_id != user_id:
+                raise HTTPException(status_code=403, detail="Access denied")
 
         if data.remove_recurrence:
             task.recurrence_id = None
@@ -207,6 +216,10 @@ class TaskService:
         update_data = data.model_dump(exclude_unset=True, exclude={"recurrence", "remove_recurrence"})
         for field, value in update_data.items():
             setattr(task, field, value)
+
+        if task.workspace == WorkspaceType.personal:
+            task.enterprise_id = None
+            task.is_public = False
 
         saved = await self._repo.save(task)
         return await self._get_task_read(saved)
@@ -267,10 +280,14 @@ class TaskService:
             raise HTTPException(status_code=404, detail="Task not found")
 
         # Check access
-        assignees = await self._repo.get_assignees(task_id)
-        is_assignee = any(a.user_id == user_id for a in assignees)
-        if task.creator_id != user_id and task.responsible_id != user_id and not is_assignee:
-            raise HTTPException(status_code=403, detail="Access denied")
+        if task.workspace == WorkspaceType.personal:
+            if task.creator_id != user_id:
+                raise HTTPException(status_code=403, detail="Acesso negado. Esta tarefa pessoal é estritamente privada.")
+        else:
+            assignees = await self._repo.get_assignees(task_id)
+            is_assignee = any(a.user_id == user_id for a in assignees)
+            if task.creator_id != user_id and task.responsible_id != user_id and not is_assignee:
+                raise HTTPException(status_code=403, detail="Access denied")
 
         was_done = task.status == TaskStatus.done
         task.status = data.status
@@ -289,13 +306,15 @@ class TaskService:
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         if task.creator_id != user_id:
-            raise HTTPException(status_code=403, detail="Only the creator can delete this task")
+            raise HTTPException(status_code=403, detail="Apenas o criador pode excluir esta tarefa")
         await self._repo.delete(task_id)
 
     async def add_assignee(self, task_id: str, assignee_user_id: str, requesting_user_id: str) -> TaskRead:
         task = await self._repo.get_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
+        if task.workspace == WorkspaceType.personal:
+            raise HTTPException(status_code=400, detail="Tarefas pessoais são privadas e não aceitam responsáveis externos")
         if task.creator_id != requesting_user_id:
             raise HTTPException(status_code=403, detail="Only the creator can assign users")
 
@@ -307,8 +326,11 @@ class TaskService:
         task = await self._repo.get_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
+        if task.workspace == WorkspaceType.personal:
+            raise HTTPException(status_code=400, detail="Tarefas pessoais são privadas e não aceitam responsáveis externos")
         if task.creator_id != requesting_user_id:
             raise HTTPException(status_code=403, detail="Only the creator can remove assignees")
 
         await self._repo.remove_assignee(task_id, assignee_user_id)
         return await self._get_task_read(task)
+

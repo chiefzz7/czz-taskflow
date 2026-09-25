@@ -54,7 +54,7 @@ class InMemoryTaskRepository(TaskRepository):
         """Return enterprise tasks visible to the user."""
         result = []
         for task in self._tasks.values():
-            if task.enterprise_id != enterprise_id:
+            if task.enterprise_id != enterprise_id or task.workspace != WorkspaceType.enterprise:
                 continue
             # Visibility: creator, responsible, assignee, viewer, or is_public
             if task.is_public:
@@ -67,6 +67,7 @@ class InMemoryTaskRepository(TaskRepository):
             if any(a.user_id == user_id for a in assignees):
                 result.append(task)
         return result
+
 
     async def get_assignees(self, task_id: str) -> List[TaskAssignee]:
         return self._assignees.get(task_id, [])
@@ -149,6 +150,7 @@ class SQLTaskRepository(TaskRepository):
         with Session(self.engine) as session:
             statement = select(Task).where(
                 Task.enterprise_id == enterprise_id,
+                Task.workspace == WorkspaceType.enterprise,
                 or_(
                     Task.is_public == True,
                     Task.creator_id == user_id,
@@ -164,6 +166,7 @@ class SQLTaskRepository(TaskRepository):
                 extra_tasks = session.exec(
                     select(Task).where(
                         Task.enterprise_id == enterprise_id,
+                        Task.workspace == WorkspaceType.enterprise,
                         Task.id.in_(assigned_task_ids)
                     )
                 ).all()
@@ -172,6 +175,7 @@ class SQLTaskRepository(TaskRepository):
                     if t.id not in existing_ids:
                         tasks.append(t)
             return tasks
+
 
     async def get_assignees(self, task_id: str) -> List[TaskAssignee]:
         from sqlmodel import Session, select

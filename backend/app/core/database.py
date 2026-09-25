@@ -15,13 +15,21 @@ from sqlalchemy import text
 def create_db_and_tables() -> None:
     """Garante a criação de todas as tabelas no Supabase."""
     SQLModel.metadata.create_all(engine)
-    # Ensure days_of_month column exists on recurrences table
+    # Ensure newly added columns exist in Supabase tables
     with Session(engine) as session:
-        try:
-            session.exec(text("ALTER TABLE recurrences ADD COLUMN days_of_month VARCHAR;"))
-            session.commit()
-        except Exception:
-            session.rollback()
+        migrations = [
+            "ALTER TABLE recurrences ADD COLUMN IF NOT EXISTS days_of_month VARCHAR;",
+            "ALTER TABLE enterprises ADD COLUMN IF NOT EXISTS invite_code VARCHAR;",
+            "ALTER TABLE enterprise_members ADD COLUMN IF NOT EXISTS custom_role_id VARCHAR;",
+            "ALTER TABLE enterprise_members ADD COLUMN IF NOT EXISTS job_title VARCHAR;",
+        ]
+        for sql in migrations:
+            try:
+                session.exec(text(sql))
+                session.commit()
+            except Exception:
+                session.rollback()
+
 
 
 def get_session():
