@@ -22,6 +22,9 @@ def create_db_and_tables() -> None:
             "ALTER TABLE enterprises ADD COLUMN IF NOT EXISTS invite_code VARCHAR;",
             "ALTER TABLE enterprise_members ADD COLUMN IF NOT EXISTS custom_role_id VARCHAR;",
             "ALTER TABLE enterprise_members ADD COLUMN IF NOT EXISTS job_title VARCHAR;",
+            "ALTER TABLE chats ALTER COLUMN enterprise_id DROP NOT NULL;",
+            "ALTER TABLE chats ALTER COLUMN name DROP NOT NULL;",
+            "ALTER TABLE messages ALTER COLUMN enterprise_id DROP NOT NULL;",
         ]
         for sql in migrations:
             try:

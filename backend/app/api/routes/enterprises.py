@@ -222,7 +222,7 @@ async def list_chats(
     enterprise_id: str,
     current_user: User = Depends(get_current_user),
 ) -> List[ChatRead]:
-    return await chat_service.list_chats(enterprise_id, current_user.id)
+    return await chat_service.list_enterprise_chats(enterprise_id, current_user.id)
 
 
 @router.post("/{enterprise_id}/chats", response_model=ChatRead, status_code=201)
@@ -231,7 +231,33 @@ async def create_chat(
     data: ChatCreate,
     current_user: User = Depends(get_current_user),
 ) -> ChatRead:
-    return await chat_service.create_chat(enterprise_id, data, current_user.id)
+    if data.recipient_id:
+        return await chat_service.get_or_create_enterprise_direct_chat(
+            enterprise_id=enterprise_id,
+            current_user_id=current_user.id,
+            recipient_id=data.recipient_id,
+        )
+    return await chat_service.create_enterprise_channel(
+        enterprise_id=enterprise_id,
+        name=data.name or "geral",
+        creator_id=current_user.id,
+    )
+
+
+@router.post("/{enterprise_id}/chats/direct", response_model=ChatRead, status_code=201)
+async def create_direct_chat(
+    enterprise_id: str,
+    data: ChatCreate,
+    current_user: User = Depends(get_current_user),
+) -> ChatRead:
+    if not data.recipient_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="recipient_id é obrigatório para chat direto")
+    return await chat_service.get_or_create_enterprise_direct_chat(
+        enterprise_id=enterprise_id,
+        current_user_id=current_user.id,
+        recipient_id=data.recipient_id,
+    )
 
 
 @router.get("/{enterprise_id}/chats/{chat_id}/messages", response_model=List[MessageRead])
@@ -240,4 +266,5 @@ async def get_messages(
     chat_id: str,
     current_user: User = Depends(get_current_user),
 ) -> List[MessageRead]:
-    return await chat_service.get_messages(chat_id, enterprise_id, current_user.id)
+    return await chat_service.get_messages(chat_id=chat_id, user_id=current_user.id)
+

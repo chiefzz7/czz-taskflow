@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from app.repositories.base import BaseRepository
 from app.models.chat import Chat, ChatMember, Message
+from app.models.enums import ChatType
 
 
 class ChatRepository(BaseRepository[Chat]):
@@ -12,8 +13,12 @@ class ChatRepository(BaseRepository[Chat]):
     async def delete(self, id: str) -> bool: ...
 
     async def list_by_enterprise(self, enterprise_id: str) -> List[Chat]: ...
+    async def list_user_chats(self, user_id: str, enterprise_id: Optional[str] = None) -> List[Chat]: ...
+    async def find_direct_chat(self, user1_id: str, user2_id: str, enterprise_id: Optional[str] = None) -> Optional[Chat]: ...
+    async def is_member(self, chat_id: str, user_id: str) -> bool: ...
     async def save_message(self, message: Message) -> Message: ...
     async def list_messages(self, chat_id: str, limit: int = 50) -> List[Message]: ...
+    async def get_last_message(self, chat_id: str) -> Optional[Message]: ...
     async def add_member(self, member: ChatMember) -> ChatMember: ...
     async def list_members(self, chat_id: str) -> List[ChatMember]: ...
 
@@ -47,6 +52,44 @@ class InMemoryChatRepository(ChatRepository):
     async def list_by_enterprise(self, enterprise_id: str) -> List[Chat]:
         return [c for c in self._chats.values() if c.enterprise_id == enterprise_id]
 
+    async def list_user_chats(self, user_id: str, enterprise_id: Optional[str] = None) -> List[Chat]:
+        result = []
+        for chat in self._chats.values():
+            if enterprise_id:
+                if chat.enterprise_id != enterprise_id:
+                    continue
+                # Channels are visible to all enterprise members
+                if chat.type == ChatType.channel:
+                    result.append(chat)
+                else:
+                    # Direct chat: user must be a member
+                    members = self._members.get(chat.id, [])
+                    if any(m.user_id == user_id for m in members):
+                        result.append(chat)
+            else:
+                # Independent private chats have enterprise_id == None
+                if chat.enterprise_id is None:
+                    members = self._members.get(chat.id, [])
+                    if any(m.user_id == user_id for m in members):
+                        result.append(chat)
+        return result
+
+    async def find_direct_chat(self, user1_id: str, user2_id: str, enterprise_id: Optional[str] = None) -> Optional[Chat]:
+        for chat in self._chats.values():
+            if chat.type != ChatType.direct:
+                continue
+            if chat.enterprise_id != enterprise_id:
+                continue
+            members = self._members.get(chat.id, [])
+            user_ids = {m.user_id for m in members}
+            if user1_id in user_ids and user2_id in user_ids:
+                return chat
+        return None
+
+    async def is_member(self, chat_id: str, user_id: str) -> bool:
+        members = self._members.get(chat_id, [])
+        return any(m.user_id == user_id for m in members)
+
     async def save_message(self, message: Message) -> Message:
         if message.chat_id not in self._messages:
             self._messages[message.chat_id] = []
@@ -56,6 +99,10 @@ class InMemoryChatRepository(ChatRepository):
     async def list_messages(self, chat_id: str, limit: int = 50) -> List[Message]:
         msgs = self._messages.get(chat_id, [])
         return msgs[-limit:]
+
+    async def get_last_message(self, chat_id: str) -> Optional[Message]:
+        msgs = self._messages.get(chat_id, [])
+        return msgs[-1] if msgs else None
 
     async def add_member(self, member: ChatMember) -> ChatMember:
         if member.chat_id not in self._members:
@@ -116,6 +163,88 @@ class SQLChatRepository(ChatRepository):
             statement = select(Chat).where(Chat.enterprise_id == enterprise_id)
             return list(session.exec(statement).all())
 
+    async def list_user_chats(self, user_id: str, enterprise_id: Optional[str] = None) -> List[Chat]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            if enterprise_id:
+                # Channels belonging to the enterprise
+                channels = list(session.exec(
+                    select(Chat).where(
+                        Chat.enterprise_id == enterprise_id,
+                        Chat.type == ChatType.channel,
+                    )
+                ).all())
+
+                # Direct chats in this enterprise where user_id is a member
+                member_chat_ids = session.exec(
+                    select(ChatMember.chat_id).where(ChatMember.user_id == user_id)
+                ).all()
+
+                directs = []
+                if member_chat_ids:
+                    directs = list(session.exec(
+                        select(Chat).where(
+                            Chat.id.in_(member_chat_ids),
+                            Chat.enterprise_id == enterprise_id,
+                            Chat.type == ChatType.direct,
+                        )
+                    ).all())
+
+                return channels + directs
+            else:
+                # Independent private chats (enterprise_id is null)
+                member_chat_ids = session.exec(
+                    select(ChatMember.chat_id).where(ChatMember.user_id == user_id)
+                ).all()
+                if not member_chat_ids:
+                    return []
+                return list(session.exec(
+                    select(Chat).where(
+                        Chat.id.in_(member_chat_ids),
+                        Chat.enterprise_id.is_(None),
+                    )
+                ).all())
+
+    async def find_direct_chat(self, user1_id: str, user2_id: str, enterprise_id: Optional[str] = None) -> Optional[Chat]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            u1_chats = session.exec(
+                select(ChatMember.chat_id).where(ChatMember.user_id == user1_id)
+            ).all()
+            if not u1_chats:
+                return None
+
+            common_chat_ids = session.exec(
+                select(ChatMember.chat_id).where(
+                    ChatMember.chat_id.in_(u1_chats),
+                    ChatMember.user_id == user2_id,
+                )
+            ).all()
+            if not common_chat_ids:
+                return None
+
+            statement = select(Chat).where(
+                Chat.id.in_(common_chat_ids),
+                Chat.type == ChatType.direct,
+            )
+            if enterprise_id:
+                statement = statement.where(Chat.enterprise_id == enterprise_id)
+            else:
+                statement = statement.where(Chat.enterprise_id.is_(None))
+
+            return session.exec(statement).first()
+
+    async def is_member(self, chat_id: str, user_id: str) -> bool:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            member = session.exec(
+                select(ChatMember).where(
+                    ChatMember.chat_id == chat_id,
+                    ChatMember.user_id == user_id,
+                )
+            ).first()
+            return member is not None
+
     async def save_message(self, message: Message) -> Message:
         from sqlmodel import Session
         with Session(self.engine) as session:
@@ -130,6 +259,12 @@ class SQLChatRepository(ChatRepository):
             statement = select(Message).where(Message.chat_id == chat_id).order_by(Message.created_at.desc()).limit(limit)
             messages = list(session.exec(statement).all())
             return list(reversed(messages))
+
+    async def get_last_message(self, chat_id: str) -> Optional[Message]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = select(Message).where(Message.chat_id == chat_id).order_by(Message.created_at.desc()).limit(1)
+            return session.exec(statement).first()
 
     async def add_member(self, member: ChatMember) -> ChatMember:
         from sqlmodel import Session, select
@@ -152,4 +287,3 @@ class SQLChatRepository(ChatRepository):
         with Session(self.engine) as session:
             statement = select(ChatMember).where(ChatMember.chat_id == chat_id)
             return list(session.exec(statement).all())
-

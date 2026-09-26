@@ -35,8 +35,13 @@ task_service = TaskService(task_repo=task_repo, recurrence_service=recurrence_se
 enterprise_service = EnterpriseService(enterprise_repo=enterprise_repo, user_repo=user_repo)
 dashboard_service = DashboardService(task_repo=task_repo, enterprise_repo=enterprise_repo, user_repo=user_repo)
 report_service = ReportService(task_repo=task_repo)
-chat_service = ChatService(chat_repo=chat_repo, enterprise_repo=enterprise_repo, user_repo=user_repo)
 storage_service = get_storage_service()
+chat_service = ChatService(
+    chat_repo=chat_repo,
+    enterprise_repo=enterprise_repo,
+    user_repo=user_repo,
+    storage_service=storage_service,
+)
 social_service = SocialService(
     social_repo=social_repo,
     enterprise_repo=enterprise_repo,

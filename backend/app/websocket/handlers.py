@@ -1,23 +1,21 @@
 import json
-from datetime import datetime, timezone
-
+from typing import Optional
 from fastapi import WebSocket, WebSocketDisconnect
 
 from app.websocket.manager import connection_manager
 from app.core.security import decode_access_token
-from app.models.chat import Message
-from app.models.enums import MessageType, MessageStatus
-from app.dependencies.container import chat_service, auth_service, enterprise_service
+from app.models.enums import MessageType
+from app.dependencies.container import chat_service, auth_service
 
 
 async def handle_chat_websocket(
     websocket: WebSocket,
-    enterprise_id: str,
     chat_id: str,
     token: str,
+    enterprise_id: Optional[str] = None,
 ) -> None:
     """
-    WebSocket handler for enterprise chat.
+    WebSocket handler for real-time chat (enterprise channels, enterprise DMs, and personal direct chats).
     Token is validated from query param (?token=...).
     """
     # Authenticate
@@ -31,14 +29,15 @@ async def handle_chat_websocket(
         await websocket.close(code=4001, reason="User not found")
         return
 
-    # Validate enterprise membership
-    role = await enterprise_service.get_member_role(enterprise_id, user_id)
-    if role is None:
-        await websocket.close(code=4003, reason="Not a member")
+    # Validate chat access (Enterprise member or Private chat member)
+    try:
+        await chat_service.validate_user_chat_access(chat_id, user_id)
+    except Exception as exc:
+        await websocket.close(code=4003, reason=str(exc))
         return
 
-    # Connect
-    await connection_manager.connect(websocket, enterprise_id, chat_id)
+    # Connect to room
+    await connection_manager.connect(websocket, chat_id)
 
     try:
         while True:
@@ -50,20 +49,28 @@ async def handle_chat_websocket(
                 await websocket.send_text(json.dumps({"error": "Invalid JSON"}))
                 continue
 
-            # Build and persist message
-            msg_type = MessageType(data.get("type", "text"))
-            message = Message(
-                chat_id=chat_id,
-                enterprise_id=enterprise_id,
-                author_id=user_id,
-                content=data.get("content", ""),
-                type=msg_type,
-                attachment_url=data.get("attachment_url"),
-                status=MessageStatus.sent,
-            )
-            saved = await chat_service.save_message(message)
+            content = data.get("content", "").strip()
+            raw_type = data.get("type", "text")
+            attachment_url = data.get("attachment_url")
 
-            # Broadcast to all clients in the room
+            if not content and not attachment_url:
+                continue
+
+            try:
+                msg_type = MessageType(raw_type)
+            except ValueError:
+                msg_type = MessageType.text
+
+            # Persist message
+            saved = await chat_service.send_message(
+                chat_id=chat_id,
+                user_id=user_id,
+                content=content,
+                msg_type=msg_type,
+                attachment_url=attachment_url,
+            )
+
+            # Broadcast to all clients connected to this chat room
             broadcast_payload = json.dumps({
                 "id": saved.id,
                 "chat_id": saved.chat_id,
@@ -72,13 +79,13 @@ async def handle_chat_websocket(
                 "author_name": saved.author_name,
                 "author_avatar": saved.author_avatar,
                 "content": saved.content,
-                "type": saved.type,
+                "type": saved.type.value if hasattr(saved.type, "value") else str(saved.type),
                 "attachment_url": saved.attachment_url,
-                "status": saved.status,
+                "status": saved.status.value if hasattr(saved.status, "value") else str(saved.status),
                 "created_at": saved.created_at.isoformat(),
             }, default=str)
 
-            await connection_manager.broadcast(broadcast_payload, enterprise_id, chat_id)
+            await connection_manager.broadcast(broadcast_payload, chat_id)
 
     except WebSocketDisconnect:
-        connection_manager.disconnect(websocket, enterprise_id, chat_id)
+        connection_manager.disconnect(websocket, chat_id)

@@ -7,11 +7,12 @@ import os
 
 from app.core.config import settings
 from app.core.database import create_db_and_tables
-from app.api.routes import auth, tasks, enterprises, dashboard, reports, users, social
+from app.api.routes import auth, tasks, enterprises, dashboard, reports, users, social, chat
 from app.websocket.handlers import handle_chat_websocket
 from app.utils.seed import run_seed
 # Import all models so SQLModel.metadata knows about them and creates all tables
 import app.models.password_reset  # noqa: F401
+import app.models.chat  # noqa: F401
 
 
 @asynccontextmanager
@@ -56,19 +57,31 @@ app.include_router(enterprises.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(reports.router, prefix=API_PREFIX)
 app.include_router(social.router, prefix=API_PREFIX)
+app.include_router(chat.router, prefix=API_PREFIX)
 
 
 
 # ── WebSocket ─────────────────────────────────────────────────────────────────
+@app.websocket("/ws/chat/{chat_id}")
+async def universal_chat_websocket(
+    websocket: WebSocket,
+    chat_id: str,
+    token: str,
+) -> None:
+    """Universal WebSocket endpoint for real-time chat (enterprise or personal)."""
+    await handle_chat_websocket(websocket, chat_id=chat_id, token=token)
+
+
 @app.websocket("/ws/enterprises/{enterprise_id}/chat/{chat_id}")
-async def chat_websocket(
+async def enterprise_chat_websocket(
     websocket: WebSocket,
     enterprise_id: str,
     chat_id: str,
     token: str,
 ) -> None:
     """WebSocket endpoint for real-time enterprise chat."""
-    await handle_chat_websocket(websocket, enterprise_id, chat_id, token)
+    await handle_chat_websocket(websocket, chat_id=chat_id, token=token, enterprise_id=enterprise_id)
+
 
 
 # ── Health Check ─────────────────────────────────────────────────────────────

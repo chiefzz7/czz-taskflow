@@ -16,6 +16,7 @@ const personalNav = [
   { to: '/tasks', icon: CheckSquare, label: 'Minhas Tarefas' },
   { to: '/kanban', icon: Columns3, label: 'Kanban' },
   { to: '/social', icon: Share2, label: 'Redes Sociais' },
+  { to: '/chat', icon: MessageSquare, label: 'Chat' },
   { to: '/enterprise', icon: Building2, label: 'Empresas' },
   { to: '/calendar', icon: Calendar, label: 'Calendário' },
   { to: '/reports', icon: BarChart2, label: 'Relatórios' },
