@@ -9,7 +9,11 @@ from app.models.user import User
 from app.models.password_reset import PasswordResetToken
 from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse, ForgotPasswordRequest, ResetPasswordRequest
 from app.schemas.user import UserRead
-from app.core.security import hash_password, verify_password, create_access_token
+from app.core.security import (
+    hash_password, verify_password,
+    async_hash_password, async_verify_password,
+    create_access_token,
+)
 from app.core.config import settings
 from app.core.database import get_session
 from app.services.email_service import send_reset_email
@@ -27,10 +31,11 @@ class AuthService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Email already registered",
             )
+        p_hash = await async_hash_password(data.password)
         user = User(
             name=data.name,
             email=data.email.lower(),
-            password_hash=hash_password(data.password),
+            password_hash=p_hash,
             timezone=data.timezone,
         )
         saved = await self._repo.save(user)
@@ -44,7 +49,7 @@ class AuthService:
 
     async def login(self, data: LoginRequest) -> TokenResponse:
         user = await self._repo.get_by_email(data.email.lower())
-        if not user or not verify_password(data.password, user.password_hash):
+        if not user or not await async_verify_password(data.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",

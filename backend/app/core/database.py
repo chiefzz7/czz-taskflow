@@ -1,11 +1,22 @@
 from sqlmodel import SQLModel, create_engine, Session
 from app.core.config import settings
 
-# Conexão com o banco de dados PostgreSQL do Supabase
+# Conexão com o banco de dados PostgreSQL do Supabase (com pool otimizado)
+engine_kwargs = {
+    "echo": False,
+    "pool_pre_ping": True,
+}
+if "sqlite" not in settings.DATABASE_URL.lower():
+    engine_kwargs.update({
+        "pool_size": 20,
+        "max_overflow": 15,
+        "pool_recycle": 1800,
+        "pool_timeout": 30,
+    })
+
 engine = create_engine(
     settings.DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,
+    **engine_kwargs,
 )
 
 

@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict
 from datetime import datetime, timezone
+import time
 
 from app.repositories.base import BaseRepository
 from app.models.user import User
@@ -12,6 +13,9 @@ class UserRepository(BaseRepository[User]):
         ...
 
     async def get_by_id(self, id: str) -> Optional[User]:
+        ...
+
+    async def get_by_ids(self, ids: List[str]) -> Dict[str, User]:
         ...
 
     async def list_all(self) -> List[User]:
@@ -27,7 +31,6 @@ class UserRepository(BaseRepository[User]):
 class InMemoryUserRepository(UserRepository):
     """
     Development-only in-memory implementation.
-    Will be replaced by SQLUserRepository when PostgreSQL is introduced.
     """
 
     def __init__(self) -> None:
@@ -36,6 +39,9 @@ class InMemoryUserRepository(UserRepository):
 
     async def get_by_id(self, id: str) -> Optional[User]:
         return self._store.get(id)
+
+    async def get_by_ids(self, ids: List[str]) -> Dict[str, User]:
+        return {uid: self._store[uid] for uid in ids if uid in self._store}
 
     async def get_by_email(self, email: str) -> Optional[User]:
         uid = self._email_index.get(email.lower())
@@ -61,39 +67,93 @@ class InMemoryUserRepository(UserRepository):
 
 
 class SQLUserRepository(UserRepository):
-    """Implementação real conectada ao Supabase PostgreSQL via SQLModel."""
+    """Implementação conectada ao Supabase PostgreSQL via SQLModel com cache em memória."""
 
     def __init__(self) -> None:
         from app.core.database import engine
         self.engine = engine
+        # In-memory user cache: user_id -> (User, timestamp)
+        self._cache: Dict[str, tuple[User, float]] = {}
+        self._cache_ttl = 120.0  # 2 minutes TTL
+
+    def _get_from_cache(self, user_id: str) -> Optional[User]:
+        cached = self._cache.get(user_id)
+        if cached:
+            user_obj, ts = cached
+            if time.time() - ts < self._cache_ttl:
+                return user_obj
+            del self._cache[user_id]
+        return None
+
+    def _put_cache(self, user: User) -> None:
+        self._cache[user.id] = (user, time.time())
 
     async def get_by_id(self, id: str) -> Optional[User]:
+        cached = self._get_from_cache(id)
+        if cached:
+            return cached
+
         from sqlmodel import Session
         with Session(self.engine) as session:
-            return session.get(User, id)
+            user = session.get(User, id)
+            if user:
+                self._put_cache(user)
+            return user
+
+    async def get_by_ids(self, ids: List[str]) -> Dict[str, User]:
+        if not ids:
+            return {}
+
+        result: Dict[str, User] = {}
+        missing_ids: List[str] = []
+
+        for uid in ids:
+            cached = self._get_from_cache(uid)
+            if cached:
+                result[uid] = cached
+            else:
+                missing_ids.append(uid)
+
+        if missing_ids:
+            from sqlmodel import Session, select
+            with Session(self.engine) as session:
+                statement = select(User).where(User.id.in_(missing_ids))
+                db_users = session.exec(statement).all()
+                for u in db_users:
+                    self._put_cache(u)
+                    result[u.id] = u
+
+        return result
 
     async def get_by_email(self, email: str) -> Optional[User]:
         from sqlmodel import Session, select
         with Session(self.engine) as session:
             statement = select(User).where(User.email == email.lower())
-            return session.exec(statement).first()
+            user = session.exec(statement).first()
+            if user:
+                self._put_cache(user)
+            return user
 
     async def list_all(self) -> List[User]:
         from sqlmodel import Session, select
         with Session(self.engine) as session:
-            return list(session.exec(select(User)).all())
+            users = list(session.exec(select(User)).all())
+            for u in users:
+                self._put_cache(u)
+            return users
 
     async def save(self, user: User) -> User:
         from sqlmodel import Session
         with Session(self.engine) as session:
             user.updated_at = datetime.now(timezone.utc)
-            # Merge / Add
             merged = session.merge(user)
             session.commit()
             session.refresh(merged)
+            self._put_cache(merged)
             return merged
 
     async def delete(self, id: str) -> bool:
+        self._cache.pop(id, None)
         from sqlmodel import Session
         with Session(self.engine) as session:
             user = session.get(User, id)
@@ -102,4 +162,3 @@ class SQLUserRepository(UserRepository):
                 session.commit()
                 return True
             return False
-

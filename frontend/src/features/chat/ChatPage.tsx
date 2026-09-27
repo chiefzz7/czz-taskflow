@@ -171,23 +171,41 @@ export default function ChatPage() {
 
     let isSubscribed = true;
     let socket: WebSocket;
+    let pingInterval: ReturnType<typeof setInterval> | undefined;
 
     try {
       socket = new WebSocket(wsUrl);
       wsRef.current = socket;
 
       socket.onopen = () => {
-        if (isSubscribed) setWsConnected(true);
+        if (isSubscribed) {
+          setWsConnected(true);
+          // Keep-alive heartbeat every 25 seconds
+          pingInterval = setInterval(() => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: 'ping' }));
+            }
+          }, 25000);
+        }
       };
 
       socket.onmessage = (event) => {
         if (!isSubscribed) return;
         try {
           const data = JSON.parse(event.data);
+          if (data.type === 'pong') return; // Heartbeat response
+
           if (data.id && data.chat_id === activeChat.id) {
             setMessages((prev) => {
-              // Avoid duplicates
-              if (prev.some((m) => m.id === data.id)) return prev;
+              // Replace optimistic message if match exists, or avoid duplicate
+              const existingIdx = prev.findIndex(
+                (m) => m.id === data.id || (m.id.startsWith('temp-') && m.content === data.content && m.author_id === data.author_id)
+              );
+              if (existingIdx !== -1) {
+                const updated = [...prev];
+                updated[existingIdx] = data as Message;
+                return updated;
+              }
               return [...prev, data as Message];
             });
           }
@@ -209,32 +227,54 @@ export default function ChatPage() {
 
     return () => {
       isSubscribed = false;
+      if (pingInterval) clearInterval(pingInterval);
       if (socket) {
         socket.close();
       }
     };
   }, [activeChat?.id]);
 
-  // ── Send Message ───────────────────────────────────────────────────────────
+  // ── Send Message (Optimistic UI for instantaneous response) ────────────────
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!activeChat || (!inputText.trim() && !attachment)) return;
+
+    const content = inputText.trim();
+    const currentAttachment = attachment;
+    const tempId = `temp-${Date.now()}`;
+
+    // Instant optimistic update
+    if (content && !currentAttachment) {
+      const optimisticMsg: Message = {
+        id: tempId,
+        chat_id: activeChat.id,
+        enterprise_id: activeChat.enterprise_id,
+        author_id: user?.id || '',
+        author_name: user?.name || 'Você',
+        author_avatar: user?.avatar_url || null,
+        content,
+        type: 'text',
+        attachment_url: null,
+        status: 'sent',
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimisticMsg]);
+      setInputText('');
+    }
 
     setSending(true);
     let attachmentUrl = '';
     let msgType: 'text' | 'image' | 'audio' = 'text';
 
     try {
-      if (attachment) {
+      if (currentAttachment) {
         setUploadingAttachment(true);
-        const uploadRes = await chatService.uploadAttachment(attachment.file);
+        const uploadRes = await chatService.uploadAttachment(currentAttachment.file);
         attachmentUrl = uploadRes.url;
-        msgType = attachment.type;
+        msgType = currentAttachment.type;
         setAttachment(null);
+        setInputText('');
       }
-
-      const content = inputText.trim();
-      setInputText('');
 
       // Send via WebSocket if connected, otherwise fallback to HTTP
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -251,7 +291,15 @@ export default function ChatPage() {
           type: msgType,
           attachment_url: attachmentUrl || null,
         });
-        setMessages((prev) => [...prev, saved]);
+        setMessages((prev) => {
+          const idx = prev.findIndex((m) => m.id === tempId);
+          if (idx !== -1) {
+            const next = [...prev];
+            next[idx] = saved;
+            return next;
+          }
+          return [...prev, saved];
+        });
       }
     } catch (err) {
       console.error('Erro ao enviar mensagem:', err);

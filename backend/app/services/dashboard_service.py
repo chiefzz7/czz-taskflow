@@ -1,6 +1,7 @@
-from typing import List, Dict, Any
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 
+from app.core.cache import cache
 from app.repositories.task_repository import TaskRepository
 from app.repositories.enterprise_repository import EnterpriseRepository
 from app.repositories.user_repository import UserRepository
@@ -9,6 +10,22 @@ from app.schemas.dashboard import (
     PersonalDashboard, EnterpriseDashboard,
     TaskStatusCount, TaskPriorityCount, MemberTaskCount,
 )
+
+
+def _is_overdue(due_at: Optional[datetime], now: datetime) -> bool:
+    if not due_at:
+        return False
+    if due_at.tzinfo is None:
+        return due_at.replace(tzinfo=timezone.utc) < now
+    return due_at < now
+
+
+def _safe_dt(dt: Optional[datetime], fallback: datetime) -> datetime:
+    if not dt:
+        return fallback
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 class DashboardService:
@@ -23,6 +40,11 @@ class DashboardService:
         self._users = user_repo
 
     async def get_personal_dashboard(self, user_id: str) -> PersonalDashboard:
+        cache_key = f"dash:personal:{user_id}"
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+
         now = datetime.now(timezone.utc)
         all_tasks = await self._tasks.list_by_creator(user_id)
         personal_tasks = [t for t in all_tasks if t.enterprise_id is None]
@@ -33,7 +55,7 @@ class DashboardService:
         open_tasks = [t for t in personal_tasks if t.status not in (TaskStatus.done, TaskStatus.archived)]
         overdue = [
             t for t in personal_tasks
-            if t.due_at and t.due_at.replace(tzinfo=timezone.utc) < now
+            if _is_overdue(t.due_at, now)
             and t.status not in (TaskStatus.done, TaskStatus.archived)
         ]
 
@@ -44,17 +66,15 @@ class DashboardService:
 
         recently_completed = [
             {"id": t.id, "title": t.title, "completed_at": t.completed_at}
-            for t in sorted(completed, key=lambda x: x.completed_at or now, reverse=True)[:5]
+            for t in sorted(completed, key=lambda x: _safe_dt(x.completed_at, now), reverse=True)[:5]
         ]
-        upcoming = [
-            t for t in open_tasks if t.due_at
-        ]
+        upcoming = [t for t in open_tasks if t.due_at]
         upcoming_due = [
             {"id": t.id, "title": t.title, "due_at": t.due_at, "priority": t.priority}
-            for t in sorted(upcoming, key=lambda x: x.due_at)[:5]
+            for t in sorted(upcoming, key=lambda x: _safe_dt(x.due_at, now))[:5]
         ]
 
-        return PersonalDashboard(
+        result = PersonalDashboard(
             total_tasks=total,
             open_tasks=len(open_tasks),
             completed_tasks=len(completed),
@@ -66,8 +86,15 @@ class DashboardService:
             recently_completed=recently_completed,
             upcoming_due=upcoming_due,
         )
+        cache.set(cache_key, result, ttl_seconds=60.0)
+        return result
 
     async def get_enterprise_dashboard(self, enterprise_id: str, user_id: str) -> EnterpriseDashboard:
+        cache_key = f"dash:ent:{enterprise_id}:{user_id}"
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+
         now = datetime.now(timezone.utc)
         all_tasks = await self._tasks.list_by_enterprise(enterprise_id, user_id)
         members = await self._enterprises.list_members(enterprise_id)
@@ -78,7 +105,7 @@ class DashboardService:
         open_tasks = [t for t in all_tasks if t.status not in (TaskStatus.done, TaskStatus.archived)]
         overdue = [
             t for t in all_tasks
-            if t.due_at and t.due_at.replace(tzinfo=timezone.utc) < now
+            if _is_overdue(t.due_at, now)
             and t.status not in (TaskStatus.done, TaskStatus.archived)
         ]
 
@@ -97,12 +124,12 @@ class DashboardService:
             member_completed = [t for t in member_tasks if t.status == TaskStatus.done]
             member_overdue = [
                 t for t in member_tasks
-                if t.due_at and t.due_at.replace(tzinfo=timezone.utc) < now
+                if _is_overdue(t.due_at, now)
                 and t.status not in (TaskStatus.done, TaskStatus.archived)
             ]
             by_member.append(MemberTaskCount(
                 user_id=member.user_id,
-                user_name=user.name if user else "Unknown",
+                user_name=user.name if user else "Membro",
                 total=len(member_tasks),
                 completed=len(member_completed),
                 overdue=len(member_overdue),
@@ -110,15 +137,15 @@ class DashboardService:
 
         recently_completed = [
             {"id": t.id, "title": t.title, "completed_at": t.completed_at}
-            for t in sorted(completed, key=lambda x: x.completed_at or now, reverse=True)[:5]
+            for t in sorted(completed, key=lambda x: _safe_dt(x.completed_at, now), reverse=True)[:5]
         ]
         upcoming = [t for t in open_tasks if t.due_at]
         upcoming_due = [
             {"id": t.id, "title": t.title, "due_at": t.due_at, "priority": t.priority}
-            for t in sorted(upcoming, key=lambda x: x.due_at)[:5]
+            for t in sorted(upcoming, key=lambda x: _safe_dt(x.due_at, now))[:5]
         ]
 
-        return EnterpriseDashboard(
+        result = EnterpriseDashboard(
             total_tasks=total,
             open_tasks=len(open_tasks),
             completed_tasks=len(completed),
@@ -132,6 +159,8 @@ class DashboardService:
             upcoming_due=upcoming_due,
             total_members=len(members),
         )
+        cache.set(cache_key, result, ttl_seconds=60.0)
+        return result
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 

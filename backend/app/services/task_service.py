@@ -4,6 +4,7 @@ import json
 
 from fastapi import HTTPException, status
 
+from app.core.cache import cache
 from app.repositories.task_repository import TaskRepository
 from app.models.task import Task, TaskAssignee, Recurrence
 from app.models.enums import TaskStatus, WorkspaceType
@@ -75,6 +76,27 @@ class TaskService:
             recurrence = await self._repo.get_recurrence(task.recurrence_id)
         return self._build_task_read(task, assignees, recurrence)
 
+    async def _batch_load_task_reads(self, tasks: List[Task]) -> List[TaskRead]:
+        if not tasks:
+            return []
+        task_ids = [t.id for t in tasks]
+        rec_ids = [t.recurrence_id for t in tasks if t.recurrence_id]
+
+        # 1 single query for all assignees
+        assignees_map = await self._repo.get_assignees_batch(task_ids)
+
+        # 1 single query for all recurrences
+        recs_map = {}
+        if rec_ids:
+            recs_map = await self._repo.get_recurrences_batch(rec_ids)
+
+        result = []
+        for task in tasks:
+            assignees = assignees_map.get(task.id, [])
+            rec = recs_map.get(task.recurrence_id) if task.recurrence_id else None
+            result.append(self._build_task_read(task, assignees, rec))
+        return result
+
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
     async def create_task(self, data: TaskCreate, creator_id: str) -> TaskRead:
@@ -111,6 +133,8 @@ class TaskService:
             recurrence_id=recurrence_id,
         )
         saved = await self._repo.save(task)
+        cache.invalidate_prefix("dash:")
+        cache.invalidate_prefix("tasks:")
         return await self._get_task_read(saved)
 
     async def get_task(self, task_id: str, user_id: str) -> TaskRead:
@@ -131,6 +155,11 @@ class TaskService:
         status: Optional[TaskStatus] = None,
         search: Optional[str] = None,
     ) -> List[TaskRead]:
+        cache_key = f"tasks:p:{user_id}:{status}:{search}"
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+
         tasks = await self._repo.list_by_creator(user_id)
         # Only personal tasks
         tasks = [t for t in tasks if t.workspace == WorkspaceType.personal]
@@ -141,10 +170,10 @@ class TaskService:
             q = search.lower()
             tasks = [t for t in tasks if q in t.title.lower() or (t.description and q in t.description.lower())]
 
-        result = []
-        for task in sorted(tasks, key=lambda t: t.created_at, reverse=True):
-            result.append(await self._get_task_read(task))
-        return result
+        ordered_tasks = sorted(tasks, key=lambda t: t.created_at, reverse=True)
+        res = await self._batch_load_task_reads(ordered_tasks)
+        cache.set(cache_key, res, ttl_seconds=30.0)
+        return res
 
     async def list_enterprise_tasks(
         self,
@@ -153,6 +182,11 @@ class TaskService:
         status: Optional[TaskStatus] = None,
         search: Optional[str] = None,
     ) -> List[TaskRead]:
+        cache_key = f"tasks:e:{enterprise_id}:{user_id}:{status}:{search}"
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+
         tasks = await self._repo.list_by_enterprise(enterprise_id, user_id)
 
         if status:
@@ -161,10 +195,10 @@ class TaskService:
             q = search.lower()
             tasks = [t for t in tasks if q in t.title.lower() or (t.description and q in t.description.lower())]
 
-        result = []
-        for task in sorted(tasks, key=lambda t: t.created_at, reverse=True):
-            result.append(await self._get_task_read(task))
-        return result
+        ordered_tasks = sorted(tasks, key=lambda t: t.created_at, reverse=True)
+        res = await self._batch_load_task_reads(ordered_tasks)
+        cache.set(cache_key, res, ttl_seconds=30.0)
+        return res
 
     async def update_task(self, task_id: str, data: TaskUpdate, user_id: str) -> TaskRead:
         task = await self._repo.get_by_id(task_id)
@@ -222,6 +256,8 @@ class TaskService:
             task.is_public = False
 
         saved = await self._repo.save(task)
+        cache.invalidate_prefix("dash:")
+        cache.invalidate_prefix("tasks:")
         return await self._get_task_read(saved)
 
     async def _handle_recurrence_completion(self, task: Task) -> Optional[Task]:
@@ -299,6 +335,8 @@ class TaskService:
                 await self._handle_recurrence_completion(task)
 
         saved = await self._repo.save(task)
+        cache.invalidate_prefix("dash:")
+        cache.invalidate_prefix("tasks:")
         return await self._get_task_read(saved)
 
     async def delete_task(self, task_id: str, user_id: str) -> None:
@@ -308,6 +346,8 @@ class TaskService:
         if task.creator_id != user_id:
             raise HTTPException(status_code=403, detail="Apenas o criador pode excluir esta tarefa")
         await self._repo.delete(task_id)
+        cache.invalidate_prefix("dash:")
+        cache.invalidate_prefix("tasks:")
 
     async def add_assignee(self, task_id: str, assignee_user_id: str, requesting_user_id: str) -> TaskRead:
         task = await self._repo.get_by_id(task_id)
@@ -320,6 +360,8 @@ class TaskService:
 
         assignee = TaskAssignee(task_id=task_id, user_id=assignee_user_id)
         await self._repo.add_assignee(assignee)
+        cache.invalidate_prefix("dash:")
+        cache.invalidate_prefix("tasks:")
         return await self._get_task_read(task)
 
     async def remove_assignee(self, task_id: str, assignee_user_id: str, requesting_user_id: str) -> TaskRead:
@@ -332,5 +374,7 @@ class TaskService:
             raise HTTPException(status_code=403, detail="Only the creator can remove assignees")
 
         await self._repo.remove_assignee(task_id, assignee_user_id)
+        cache.invalidate_prefix("dash:")
+        cache.invalidate_prefix("tasks:")
         return await self._get_task_read(task)
 

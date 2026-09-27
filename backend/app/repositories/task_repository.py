@@ -15,10 +15,12 @@ class TaskRepository(BaseRepository[Task]):
     async def list_by_creator(self, creator_id: str) -> List[Task]: ...
     async def list_by_enterprise(self, enterprise_id: str, user_id: str) -> List[Task]: ...
     async def get_assignees(self, task_id: str) -> List[TaskAssignee]: ...
+    async def get_assignees_batch(self, task_ids: List[str]) -> Dict[str, List[TaskAssignee]]: ...
     async def add_assignee(self, assignee: TaskAssignee) -> TaskAssignee: ...
     async def remove_assignee(self, task_id: str, user_id: str) -> bool: ...
     async def save_recurrence(self, recurrence: Recurrence) -> Recurrence: ...
     async def get_recurrence(self, recurrence_id: str) -> Optional[Recurrence]: ...
+    async def get_recurrences_batch(self, recurrence_ids: List[str]) -> Dict[str, Recurrence]: ...
 
 
 class InMemoryTaskRepository(TaskRepository):
@@ -72,6 +74,9 @@ class InMemoryTaskRepository(TaskRepository):
     async def get_assignees(self, task_id: str) -> List[TaskAssignee]:
         return self._assignees.get(task_id, [])
 
+    async def get_assignees_batch(self, task_ids: List[str]) -> Dict[str, List[TaskAssignee]]:
+        return {tid: self._assignees.get(tid, []) for tid in task_ids}
+
     async def add_assignee(self, assignee: TaskAssignee) -> TaskAssignee:
         if assignee.task_id not in self._assignees:
             self._assignees[assignee.task_id] = []
@@ -95,6 +100,9 @@ class InMemoryTaskRepository(TaskRepository):
 
     async def get_recurrence(self, recurrence_id: str) -> Optional[Recurrence]:
         return self._recurrences.get(recurrence_id)
+
+    async def get_recurrences_batch(self, recurrence_ids: List[str]) -> Dict[str, Recurrence]:
+        return {rid: self._recurrences[rid] for rid in recurrence_ids if rid in self._recurrences}
 
 
 class SQLTaskRepository(TaskRepository):
@@ -183,6 +191,19 @@ class SQLTaskRepository(TaskRepository):
             statement = select(TaskAssignee).where(TaskAssignee.task_id == task_id)
             return list(session.exec(statement).all())
 
+    async def get_assignees_batch(self, task_ids: List[str]) -> Dict[str, List[TaskAssignee]]:
+        if not task_ids:
+            return {}
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = select(TaskAssignee).where(TaskAssignee.task_id.in_(task_ids))
+            all_assignees = list(session.exec(statement).all())
+            res: Dict[str, List[TaskAssignee]] = {tid: [] for tid in task_ids}
+            for a in all_assignees:
+                if a.task_id in res:
+                    res[a.task_id].append(a)
+            return res
+
     async def add_assignee(self, assignee: TaskAssignee) -> TaskAssignee:
         from sqlmodel import Session, select
         with Session(self.engine) as session:
@@ -226,4 +247,13 @@ class SQLTaskRepository(TaskRepository):
         from sqlmodel import Session
         with Session(self.engine) as session:
             return session.get(Recurrence, recurrence_id)
+
+    async def get_recurrences_batch(self, recurrence_ids: List[str]) -> Dict[str, Recurrence]:
+        if not recurrence_ids:
+            return {}
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = select(Recurrence).where(Recurrence.id.in_(recurrence_ids))
+            recs = list(session.exec(statement).all())
+            return {r.id: r for r in recs}
 

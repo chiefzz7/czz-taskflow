@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 import os
 import uuid
+import asyncio
 import aiofiles
 
 from app.core.config import settings
@@ -14,7 +15,7 @@ class StorageService(ABC):
     """
 
     @abstractmethod
-    async def upload(self, content: bytes, key: str, content_type: str) -> str:
+    async def upload(self, content: bytes, key: str, content_type: str = "application/octet-stream", **kwargs) -> str:
         """Upload file content and return a URL."""
         ...
 
@@ -36,12 +37,14 @@ class LocalStorageService(StorageService):
         self._dir = upload_dir or settings.UPLOAD_DIR
         os.makedirs(self._dir, exist_ok=True)
 
-    async def upload(self, content: bytes, key: str, content_type: str) -> str:
-        file_path = os.path.join(self._dir, key)
+    async def upload(self, content: bytes = b"", key: str = "", content_type: str = "application/octet-stream", **kwargs) -> str:
+        data = content or kwargs.get("file_bytes") or b""
+        filename = key or kwargs.get("filename") or f"{uuid.uuid4()}.png"
+        file_path = os.path.join(self._dir, filename)
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         async with aiofiles.open(file_path, "wb") as f:
-            await f.write(content)
-        return f"/uploads/{key}"
+            await f.write(data)
+        return f"/uploads/{filename}"
 
     async def get_url(self, key: str) -> str:
         return f"/uploads/{key}"
@@ -63,20 +66,30 @@ class SupabaseStorageService(StorageService):
         )
         self.bucket = settings.SUPABASE_BUCKET
 
-    async def upload(self, content: bytes, key: str, content_type: str) -> str:
-        # Upload para o bucket público do Supabase
-        self.client.storage.from_(self.bucket).upload(
-            path=key,
-            file=content,
-            file_options={"content-type": content_type, "upsert": "true"},
-        )
-        return self.client.storage.from_(self.bucket).get_public_url(key)
+    async def upload(self, content: bytes = b"", key: str = "", content_type: str = "application/octet-stream", **kwargs) -> str:
+        data = content or kwargs.get("file_bytes") or b""
+        path = key or kwargs.get("filename") or f"{uuid.uuid4()}.png"
+        ctype = content_type or kwargs.get("content_type") or "application/octet-stream"
+
+        def _do_upload() -> None:
+            self.client.storage.from_(self.bucket).upload(
+                path=path,
+                file=data,
+                file_options={"content-type": ctype, "upsert": "true"},
+            )
+
+        # Upload is synchronous inside Supabase storage client: run in thread to avoid freezing asyncio
+        await asyncio.to_thread(_do_upload)
+        return self.client.storage.from_(self.bucket).get_public_url(path)
 
     async def get_url(self, key: str) -> str:
         return self.client.storage.from_(self.bucket).get_public_url(key)
 
     async def delete(self, key: str) -> None:
-        self.client.storage.from_(self.bucket).remove([key])
+        def _do_delete() -> None:
+            self.client.storage.from_(self.bucket).remove([key])
+
+        await asyncio.to_thread(_do_delete)
 
 
 def get_storage_service() -> StorageService:
@@ -87,4 +100,3 @@ def get_storage_service() -> StorageService:
     if provider == "local" or provider == "supabase":
         return LocalStorageService()
     raise ValueError(f"Unknown storage provider: {provider}")
-

@@ -49,8 +49,13 @@ async def handle_chat_websocket(
                 await websocket.send_text(json.dumps({"error": "Invalid JSON"}))
                 continue
 
-            content = data.get("content", "").strip()
+            # Handle keepalive heartbeat
             raw_type = data.get("type", "text")
+            if raw_type == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+                continue
+
+            content = data.get("content", "").strip()
             attachment_url = data.get("attachment_url")
 
             if not content and not attachment_url:

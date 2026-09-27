@@ -41,8 +41,11 @@ class ChatService:
         member_reads: List[ChatMemberRead] = []
         other_user: Optional[ChatMemberRead] = None
 
+        user_ids = [m.user_id for m in members]
+        users_map = await self._users.get_by_ids(user_ids)
+
         for m in members:
-            u = await self._users.get_by_id(m.user_id)
+            u = users_map.get(m.user_id)
             mr = ChatMemberRead(
                 id=m.id,
                 chat_id=m.chat_id,
@@ -228,9 +231,16 @@ class ChatService:
     async def get_messages(self, chat_id: str, user_id: str, limit: int = 50) -> List[MessageRead]:
         chat = await self.validate_user_chat_access(chat_id, user_id)
         messages = await self._chats.list_messages(chat_id, limit=limit)
+        if not messages:
+            return []
+
+        # Batch load all message authors in a single query / cache check
+        author_ids = list({msg.author_id for msg in messages})
+        users_map = await self._users.get_by_ids(author_ids)
+
         result = []
         for msg in messages:
-            u = await self._users.get_by_id(msg.author_id)
+            u = users_map.get(msg.author_id)
             mr = MessageRead.model_validate(msg)
             if u:
                 mr.author_name = u.name
@@ -270,8 +280,6 @@ class ChatService:
         """Uploads chat attachment using the configured storage service."""
         if not self._storage:
             raise HTTPException(status_code=500, detail="Serviço de armazenamento não configurado")
-        return await self._storage.upload(
-            file_bytes=file_bytes,
-            filename=f"chat_{filename}",
-            content_type=content_type,
-        )
+        ext = filename.split(".")[-1] if "." in filename else "png"
+        key = f"chat/{uuid.uuid4()}.{ext}"
+        return await self._storage.upload(content=file_bytes, key=key, content_type=content_type)

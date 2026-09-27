@@ -15,6 +15,7 @@ from app.schemas.enterprise import (
     InviteCodeResponse,
 )
 from app.schemas.user import UserRead
+from app.core.cache import cache
 
 
 class EnterpriseService:
@@ -74,6 +75,7 @@ class EnterpriseService:
             status=MemberStatus.active,
         )
         await self._repo.save_member(member)
+        cache.invalidate_prefix(f"ent:user:{owner_id}")
 
         return EnterpriseRead.model_validate(saved)
 
@@ -92,8 +94,15 @@ class EnterpriseService:
         return EnterpriseRead.model_validate(enterprise)
 
     async def list_user_enterprises(self, user_id: str) -> List[EnterpriseRead]:
+        cache_key = f"ent:user:{user_id}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         enterprises = await self._repo.list_by_member(user_id)
-        return [EnterpriseRead.model_validate(e) for e in enterprises]
+        result = [EnterpriseRead.model_validate(e) for e in enterprises]
+        cache.set(cache_key, result, ttl_seconds=60)
+        return result
 
     async def update_enterprise(
         self, enterprise_id: str, data: EnterpriseUpdate, user_id: str
@@ -107,6 +116,8 @@ class EnterpriseService:
             setattr(enterprise, field, value)
 
         saved = await self._repo.save(enterprise)
+        cache.invalidate_prefix(f"ent:{enterprise_id}")
+        cache.invalidate_prefix("ent:user:")
         return EnterpriseRead.model_validate(saved)
 
     # ── Invite Code & Join ───────────────────────────────────────────────────
@@ -164,6 +175,8 @@ class EnterpriseService:
             status=MemberStatus.active,
         )
         await self._repo.save_member(new_member)
+        cache.invalidate_prefix(f"ent:members:{enterprise.id}")
+        cache.invalidate_prefix(f"ent:user:{user_id}")
         return EnterpriseRead.model_validate(enterprise)
 
     # ── Custom Roles (Cargos) ────────────────────────────────────────────────
@@ -185,6 +198,7 @@ class EnterpriseService:
             permissions=data.permissions,
         )
         saved = await self._repo.save_role(role)
+        cache.invalidate_prefix(f"ent:members:{enterprise_id}")
         return EnterpriseCustomRoleRead.model_validate(saved)
 
     async def update_role(
@@ -199,6 +213,7 @@ class EnterpriseService:
             setattr(role, field, value)
 
         saved = await self._repo.save_role(role)
+        cache.invalidate_prefix(f"ent:members:{enterprise_id}")
         return EnterpriseCustomRoleRead.model_validate(saved)
 
     async def delete_role(self, enterprise_id: str, role_id: str, user_id: str) -> None:
@@ -208,11 +223,17 @@ class EnterpriseService:
             raise HTTPException(status_code=404, detail="Cargo não encontrado")
 
         await self._repo.delete_role(role_id)
+        cache.invalidate_prefix(f"ent:members:{enterprise_id}")
 
     # ── Members Management ───────────────────────────────────────────────────
 
     async def list_members(self, enterprise_id: str, user_id: str) -> List[MemberRead]:
         await self._ensure_member(enterprise_id, user_id)
+        cache_key = f"ent:members:{enterprise_id}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         members = await self._repo.list_members(enterprise_id)
         roles_list = await self._repo.list_roles(enterprise_id)
         roles_map = {r.id: EnterpriseCustomRoleRead.model_validate(r) for r in roles_list}
@@ -233,6 +254,7 @@ class EnterpriseService:
                 user=UserRead.model_validate(user) if user else None,
             )
             result.append(mr)
+        cache.set(cache_key, result, ttl_seconds=60)
         return result
 
     async def add_member(
@@ -320,6 +342,9 @@ class EnterpriseService:
             if role_obj:
                 custom_role_read = EnterpriseCustomRoleRead.model_validate(role_obj)
 
+        cache.invalidate_prefix(f"ent:members:{enterprise_id}")
+        cache.invalidate_prefix(f"ent:user:{target_user.id}")
+
         return MemberRead(
             id=saved.id,
             enterprise_id=saved.enterprise_id,
@@ -359,6 +384,9 @@ class EnterpriseService:
             if role_obj:
                 custom_role_read = EnterpriseCustomRoleRead.model_validate(role_obj)
 
+        cache.invalidate_prefix(f"ent:members:{enterprise_id}")
+        cache.invalidate_prefix(f"ent:user:{target_user_id}")
+
         return MemberRead(
             id=saved.id,
             enterprise_id=saved.enterprise_id,
@@ -383,6 +411,9 @@ class EnterpriseService:
         removed = await self._repo.remove_member(enterprise_id, target_user_id)
         if not removed:
             raise HTTPException(status_code=404, detail="Membro não encontrado")
+
+        cache.invalidate_prefix(f"ent:members:{enterprise_id}")
+        cache.invalidate_prefix(f"ent:user:{target_user_id}")
 
     # ── Pending Invitations ───────────────────────────────────────────────────
 

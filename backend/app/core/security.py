@@ -6,6 +6,9 @@ import bcrypt
 from app.core.config import settings
 
 
+import asyncio
+
+
 # ── Password hashing ─────────────────────────────────────────────────────────
 
 def hash_password(plain: str) -> str:
@@ -16,6 +19,16 @@ def hash_password(plain: str) -> str:
 def verify_password(plain: str, hashed: str) -> bool:
     """Verify a plain password against a bcrypt hash."""
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+
+
+async def async_hash_password(plain: str) -> str:
+    """Async non-blocking password hashing executed in threadpool."""
+    return await asyncio.to_thread(hash_password, plain)
+
+
+async def async_verify_password(plain: str, hashed: str) -> bool:
+    """Async non-blocking password verification executed in threadpool."""
+    return await asyncio.to_thread(verify_password, plain, hashed)
 
 
 # ── JWT tokens ────────────────────────────────────────────────────────────────
