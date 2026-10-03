@@ -63,9 +63,34 @@ export default function ModalConvidarMembro({
     }
   }, [tab, allUsers.length]);
 
+  const getFullInviteLink = (): string => {
+    if (!inviteData?.invite_link) return '';
+    const link = inviteData.invite_link;
+
+    // Se já for uma URL absoluta
+    if (link.startsWith('http://') || link.startsWith('https://')) {
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        return link;
+      }
+      try {
+        const parsed = new URL(link);
+        return `${window.location.origin}${parsed.pathname}${parsed.search}`;
+      } catch {
+        return link;
+      }
+    }
+
+    // Se for relativo, usa a URL de produção quando em localhost para o convite ser compartilhável
+    const prodOrigin = (import.meta.env.VITE_APP_URL || 'https://czztaskflow.vercel.app').replace(/\/+$/, '');
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const baseOrigin = isLocalhost ? prodOrigin : window.location.origin;
+    const cleanPath = link.startsWith('/') ? link : `/${link}`;
+    return `${baseOrigin}${cleanPath}`;
+  };
+
   const handleCopy = () => {
-    if (!inviteData) return;
-    const fullLink = `${window.location.origin}${inviteData.invite_link}`;
+    const fullLink = getFullInviteLink();
+    if (!fullLink) return;
     navigator.clipboard.writeText(fullLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -254,7 +279,7 @@ export default function ModalConvidarMembro({
                         <Loader2 size={13} className="animate-spin" /> Carregando link...
                       </span>
                     ) : (
-                      `${window.location.origin}${inviteData?.invite_link || ''}`
+                      getFullInviteLink()
                     )}
                   </div>
                   <button

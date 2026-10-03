@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
-    FRONTEND_URL: str = "http://localhost:5173"
+    FRONTEND_URL: str = "https://czztaskflow.vercel.app"
 
     # Security
     JWT_SECRET_KEY: str = "super-secret-change-in-production-min-32-chars"

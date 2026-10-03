@@ -16,6 +16,7 @@ from app.schemas.enterprise import (
 )
 from app.schemas.user import UserRead
 from app.core.cache import cache
+from app.core.config import settings
 
 
 class EnterpriseService:
@@ -132,9 +133,10 @@ class EnterpriseService:
             enterprise.invite_code = f"TF-{uuid.uuid4().hex[:6].upper()}"
             enterprise = await self._repo.save(enterprise)
 
+        base_frontend = settings.FRONTEND_URL.rstrip("/")
         return InviteCodeResponse(
             invite_code=enterprise.invite_code,
-            invite_link=f"/enterprise?join={enterprise.invite_code}",
+            invite_link=f"{base_frontend}/enterprise?join={enterprise.invite_code}",
         )
 
     async def regenerate_invite_code(self, enterprise_id: str, user_id: str) -> InviteCodeResponse:
@@ -146,9 +148,10 @@ class EnterpriseService:
         enterprise.invite_code = f"TF-{uuid.uuid4().hex[:6].upper()}"
         enterprise = await self._repo.save(enterprise)
 
+        base_frontend = settings.FRONTEND_URL.rstrip("/")
         return InviteCodeResponse(
             invite_code=enterprise.invite_code,
-            invite_link=f"/enterprise?join={enterprise.invite_code}",
+            invite_link=f"{base_frontend}/enterprise?join={enterprise.invite_code}",
         )
 
     async def join_by_invite_code(self, invite_code: str, user_id: str) -> EnterpriseRead:
