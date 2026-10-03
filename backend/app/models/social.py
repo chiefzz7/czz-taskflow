@@ -38,31 +38,65 @@ class SocialMediaType(str, Enum):
 
 
 class SocialPost(SQLModel, table=True):
-    """Entidade de post e arte para gestão de Redes Sociais."""
+    """Entidade de post e arte para gestao de Redes Sociais."""
 
     __tablename__ = "social_posts"
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
     title: str = Field(max_length=256)
     caption: Optional[str] = Field(default=None)
-    
-    # Anexo da arte/mídia
+
+    # Anexo da arte/midia
     media_url: Optional[str] = Field(default=None)
     media_type: SocialMediaType = Field(default=SocialMediaType.image)
-    
+
     # Workflow e Agendamento
     platform: SocialPlatform = Field(default=SocialPlatform.instagram)
     status: SocialPostStatus = Field(default=SocialPostStatus.ideia)
     scheduled_at: Optional[datetime] = Field(default=None)
-    
-    # Atribuição de Responsabilidade (específico ou None = todos)
+
+    # Atribuicao de Responsabilidade (especifico ou None = todos)
     responsible_id: Optional[str] = Field(default=None, foreign_key="users.id")
-    responsible_name: Optional[str] = Field(default=None)  # Para facilitar visualização em listagens
+    responsible_name: Optional[str] = Field(default=None)
+
+    # Workflow de Edicao / Revisao
+    needs_edit: bool = Field(default=False)
+    edit_notes: Optional[str] = Field(default=None)
+    edit_example_url: Optional[str] = Field(default=None)
+    edit_requested_by_id: Optional[str] = Field(default=None, foreign_key="users.id")
+    edit_requested_by_name: Optional[str] = Field(default=None)
+
+    # Aprovacao
+    approved_by_id: Optional[str] = Field(default=None, foreign_key="users.id")
+    approved_by_name: Optional[str] = Field(default=None)
+    approved_at: Optional[datetime] = Field(default=None)
 
     # Workspace e Contexto
     workspace: WorkspaceType = Field(default=WorkspaceType.personal)
     enterprise_id: Optional[str] = Field(default=None, foreign_key="enterprises.id", index=True)
     creator_id: str = Field(foreign_key="users.id", index=True)
+
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+class SocialSettings(SQLModel, table=True):
+    """Configuracoes de Redes Sociais por empresa."""
+
+    __tablename__ = "social_settings"
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    enterprise_id: str = Field(foreign_key="enterprises.id", unique=True, index=True)
+
+    # Permissoes: JSON array de custom_role_ids. None = qualquer membro pode.
+    can_move_to_producao: Optional[str] = Field(default=None)
+    can_move_to_revisao: Optional[str] = Field(default=None)
+    can_approve: Optional[str] = Field(default=None)
+    can_mark_posted: Optional[str] = Field(default=None)
+    can_request_edit: Optional[str] = Field(default=None)
+
+    # JSON array de SocialPlatform strings � plataformas ativas
+    active_platforms: Optional[str] = Field(default=None)
 
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)

@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict
 from datetime import datetime, timezone
 from app.repositories.base import BaseRepository
-from app.models.social import SocialPost, SocialPostStatus, SocialPlatform
+from app.models.social import SocialPost, SocialPostStatus, SocialPlatform, SocialSettings
 from app.models.enums import WorkspaceType
 
 
@@ -14,12 +14,15 @@ class SocialRepository(BaseRepository[SocialPost]):
     async def list_by_creator(self, creator_id: str) -> List[SocialPost]: ...
     async def list_by_enterprise(self, enterprise_id: str) -> List[SocialPost]: ...
 
+    # Settings
+    async def get_settings(self, enterprise_id: str) -> Optional[SocialSettings]: ...
+    async def save_settings(self, settings: SocialSettings) -> SocialSettings: ...
+
 
 class InMemorySocialRepository(SocialRepository):
-    """Armazenamento em memória para posts de redes sociais durante o desenvolvimento."""
-
     def __init__(self) -> None:
         self._posts: Dict[str, SocialPost] = {}
+        self._settings: Dict[str, SocialSettings] = {}
 
     async def get_by_id(self, id: str) -> Optional[SocialPost]:
         return self._posts.get(id)
@@ -52,10 +55,16 @@ class InMemorySocialRepository(SocialRepository):
             reverse=True,
         )
 
+    async def get_settings(self, enterprise_id: str) -> Optional[SocialSettings]:
+        return self._settings.get(enterprise_id)
+
+    async def save_settings(self, settings: SocialSettings) -> SocialSettings:
+        settings.updated_at = datetime.now(timezone.utc)
+        self._settings[settings.enterprise_id] = settings
+        return settings
+
 
 class SQLSocialRepository(SocialRepository):
-    """Implementação real conectada ao Supabase PostgreSQL via SQLModel."""
-
     def __init__(self) -> None:
         from app.core.database import engine
         self.engine = engine
@@ -110,3 +119,17 @@ class SQLSocialRepository(SocialRepository):
             )
             return list(session.exec(statement).all())
 
+    async def get_settings(self, enterprise_id: str) -> Optional[SocialSettings]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = select(SocialSettings).where(SocialSettings.enterprise_id == enterprise_id)
+            return session.exec(statement).first()
+
+    async def save_settings(self, settings: SocialSettings) -> SocialSettings:
+        from sqlmodel import Session
+        with Session(self.engine) as session:
+            settings.updated_at = datetime.now(timezone.utc)
+            merged = session.merge(settings)
+            session.commit()
+            session.refresh(merged)
+            return merged

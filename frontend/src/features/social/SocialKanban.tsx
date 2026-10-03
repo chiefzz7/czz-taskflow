@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -19,7 +19,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   Calendar, Clock, User, MoreVertical, Edit2, Trash2,
-  ExternalLink, Eye, GripVertical, Image as ImageIcon
+  ExternalLink, Eye, GripVertical, Image as ImageIcon, PenLine, AlertCircle,
 } from 'lucide-react';
 import type { SocialPost, SocialPostStatus } from '../../types/social';
 import {
@@ -36,21 +36,24 @@ interface SocialKanbanProps {
   onEditPost: (post: SocialPost) => void;
   onDeletePost: (postId: string) => void;
   onOpenArtPreview: (imageUrl: string, title: string) => void;
+  onRequestEdit?: (post: SocialPost) => void;
 }
 
-// ── Card de Arte / Post (Visual) ─────────────────────────────────────────────
+// â”€â”€ Card de Arte / Post (Visual) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SocialCardContent({
   post,
   isDragging = false,
   onEdit,
   onDelete,
   onPreview,
+  onRequestEdit,
 }: {
   post: SocialPost;
   isDragging?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
   onPreview?: () => void;
+  onRequestEdit?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const platform = PLATFORM_INFO[post.platform] || PLATFORM_INFO.instagram;
@@ -113,14 +116,14 @@ function SocialCardContent({
         </div>
       )}
 
-      {/* Conteúdo do Card */}
+      {/* ConteÃºdo do Card */}
       <div className="p-3.5">
         <div className="flex items-start justify-between gap-2">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white leading-snug line-clamp-2">
             {post.title}
           </h3>
 
-          {/* Menu de Ações */}
+          {/* Menu de AÃ§Ãµes */}
           <div className="relative">
             <button
               type="button"
@@ -164,6 +167,16 @@ function SocialCardContent({
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
+                    onRequestEdit?.();
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-2"
+                >
+                  <PenLine size={12} /> {post.needs_edit ? 'Ver EdiÃ§Ã£o' : 'Solicitar EdiÃ§Ã£o'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
                     onDelete?.();
                   }}
                   className="w-full px-3 py-1.5 text-left text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2"
@@ -181,9 +194,33 @@ function SocialCardContent({
           </p>
         )}
 
-        {/* Rodapé: Agendamento & Responsável */}
+        {/* Needs Edit Banner */}
+        {post.needs_edit && (
+          <div className="mt-2 flex items-start gap-1.5 p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-lg">
+            <AlertCircle size={12} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300">Precisa Editar</p>
+              {post.edit_notes && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 line-clamp-2 mt-0.5">{post.edit_notes}</p>
+              )}
+              {post.edit_example_url && (
+                <a
+                  href={post.edit_example_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  className="text-[10px] text-amber-600 dark:text-amber-400 underline flex items-center gap-1 mt-0.5"
+                >
+                  <ExternalLink size={9} /> Ver exemplo
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* RodapÃ©: Agendamento & ResponsÃ¡vel */}
         <div className="mt-3 pt-2.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
-          {/* Data e hora de publicação */}
+          {/* Data e hora de publicaÃ§Ã£o */}
           {scheduledDate ? (
             <div
               className={cn(
@@ -192,7 +229,7 @@ function SocialCardContent({
                   ? 'text-red-500 dark:text-red-400'
                   : 'text-gray-600 dark:text-gray-400'
               )}
-              title="Data e hora da publicação"
+              title="Data e hora da publicaÃ§Ã£o"
             >
               <Calendar size={12} />
               <span>
@@ -201,7 +238,7 @@ function SocialCardContent({
                   month: 'short',
                 })}
               </span>
-              <span className="text-gray-300 dark:text-gray-600">·</span>
+              <span className="text-gray-300 dark:text-gray-600">Â·</span>
               <Clock size={11} />
               <span>
                 {scheduledDate.toLocaleTimeString('pt-BR', {
@@ -214,7 +251,7 @@ function SocialCardContent({
             <span className="text-gray-400 italic">Sem data</span>
           )}
 
-          {/* Responsável pela arte */}
+          {/* ResponsÃ¡vel pela arte */}
           <div
             className="flex items-center gap-1 max-w-[110px] truncate"
             title={post.responsible_name || 'Todos / Equipe'}
@@ -232,17 +269,19 @@ function SocialCardContent({
   );
 }
 
-// ── Sortable Item Wrapper ────────────────────────────────────────────────────
+// â”€â”€ Sortable Item Wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SortableSocialCard({
   post,
   onEdit,
   onDelete,
   onPreview,
+  onRequestEdit,
 }: {
   post: SocialPost;
   onEdit: () => void;
   onDelete: () => void;
   onPreview: () => void;
+  onRequestEdit?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
@@ -269,12 +308,13 @@ function SortableSocialCard({
         onEdit={onEdit}
         onDelete={onDelete}
         onPreview={onPreview}
+        onRequestEdit={onRequestEdit}
       />
     </div>
   );
 }
 
-// ── Coluna do Kanban ──────────────────────────────────────────────────────────
+// â”€â”€ Coluna do Kanban â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SocialKanbanColumn({
   status,
   label,
@@ -283,6 +323,7 @@ function SocialKanbanColumn({
   onEdit,
   onDelete,
   onPreview,
+  onRequestEdit,
 }: {
   status: SocialPostStatus;
   label: string;
@@ -291,6 +332,7 @@ function SocialKanbanColumn({
   onEdit: (post: SocialPost) => void;
   onDelete: (postId: string) => void;
   onPreview: (url: string, title: string) => void;
+  onRequestEdit?: (post: SocialPost) => void;
 }) {
   const { setNodeRef } = useDroppable({
     id: status,
@@ -347,6 +389,7 @@ function SocialKanbanColumn({
               onPreview={() =>
                 post.media_url && onPreview(post.media_url, post.title)
               }
+              onRequestEdit={onRequestEdit ? () => onRequestEdit(post) : undefined}
             />
           ))}
         </SortableContext>
@@ -384,13 +427,14 @@ function SocialKanbanColumn({
   );
 }
 
-// ── Componente Principal Kanban ───────────────────────────────────────────────
+// â”€â”€ Componente Principal Kanban â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function SocialKanban({
   posts,
   onStatusChange,
   onEditPost,
   onDeletePost,
   onOpenArtPreview,
+  onRequestEdit,
 }: SocialKanbanProps) {
   const [activePost, setActivePost] = useState<SocialPost | null>(null);
   const [overColumn, setOverColumn] = useState<SocialPostStatus | null>(null);
@@ -473,6 +517,7 @@ export default function SocialKanban({
             onEdit={onEditPost}
             onDelete={onDeletePost}
             onPreview={onOpenArtPreview}
+            onRequestEdit={onRequestEdit}
           />
         ))}
       </div>
@@ -493,3 +538,7 @@ export default function SocialKanban({
     </DndContext>
   );
 }
+
+
+
+

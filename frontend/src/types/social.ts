@@ -1,4 +1,4 @@
-export type SocialPlatform =
+﻿export type SocialPlatform =
   | 'instagram'
   | 'tiktok'
   | 'facebook'
@@ -32,6 +32,16 @@ export interface SocialPost {
   scheduled_at?: string | null;
   responsible_id?: string | null;
   responsible_name?: string | null;
+  // Workflow de edicao
+  needs_edit: boolean;
+  edit_notes?: string | null;
+  edit_example_url?: string | null;
+  edit_requested_by_id?: string | null;
+  edit_requested_by_name?: string | null;
+  // Aprovacao
+  approved_by_id?: string | null;
+  approved_by_name?: string | null;
+  approved_at?: string | null;
   workspace: 'personal' | 'enterprise';
   enterprise_id?: string | null;
   creator_id: string;
@@ -65,6 +75,21 @@ export interface SocialPostUpdate {
   responsible_name?: string | null;
 }
 
+export interface EditRequest {
+  edit_notes: string;
+  edit_example_url?: string | null;
+}
+
+export interface SocialSettings {
+  enterprise_id: string;
+  can_move_to_producao: string[] | null;
+  can_move_to_revisao: string[] | null;
+  can_approve: string[] | null;
+  can_mark_posted: string[] | null;
+  can_request_edit: string[] | null;
+  active_platforms: string[] | null;
+}
+
 export const SOCIAL_STATUS_ORDER: SocialPostStatus[] = [
   'ideia',
   'em_producao',
@@ -75,8 +100,8 @@ export const SOCIAL_STATUS_ORDER: SocialPostStatus[] = [
 
 export const SOCIAL_STATUS_LABELS: Record<SocialPostStatus, string> = {
   ideia: 'Ideia / Pauta',
-  em_producao: 'Em Produção',
-  revisao: 'Revisão / Aprovação',
+  em_producao: 'Em Producao',
+  revisao: 'Revisao / Aprovacao',
   pronto: 'Pronto / Agendado',
   postado: 'Postado',
 };
@@ -167,7 +192,16 @@ export const PLATFORM_INFO: Record<
 export const MEDIA_TYPE_LABELS: Record<SocialMediaType, string> = {
   image: 'Imagem (1:1 / 4:5)',
   story: 'Story (9:16)',
-  reels: 'Reels / Vídeo Curto',
-  video: 'Vídeo Longo',
+  reels: 'Reels / Video Curto',
+  video: 'Video Longo',
   carousel: 'Carrossel',
+};
+
+// Descricoes de transicao de status para permissoes
+export const STATUS_TRANSITION_LABELS: Record<string, string> = {
+  can_move_to_producao: 'Mover para Em Producao',
+  can_move_to_revisao: 'Mover para Revisao / Aprovacao',
+  can_approve: 'Aprovar (mover para Pronto / Agendado)',
+  can_mark_posted: 'Marcar como Postado',
+  can_request_edit: 'Solicitar Edicao (Precisa Editar)',
 };

@@ -1,9 +1,11 @@
-import api from './api';
+﻿import api from './api';
 import type {
   SocialPost,
   SocialPostCreate,
   SocialPostUpdate,
   SocialPostStatus,
+  EditRequest,
+  SocialSettings,
 } from '../types/social';
 
 export const socialService = {
@@ -32,6 +34,16 @@ export const socialService = {
     return res.data;
   },
 
+  async requestEdit(id: string, data: EditRequest): Promise<SocialPost> {
+    const res = await api.post<SocialPost>(`/social/posts/${id}/request-edit`, data);
+    return res.data;
+  },
+
+  async clearEditFlag(id: string): Promise<SocialPost> {
+    const res = await api.delete<SocialPost>(`/social/posts/${id}/request-edit`);
+    return res.data;
+  },
+
   async delete(id: string): Promise<void> {
     await api.delete(`/social/posts/${id}`);
   },
@@ -42,6 +54,17 @@ export const socialService = {
     const res = await api.post<{ url: string; filename: string }>('/social/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+    return res.data;
+  },
+
+  // Settings
+  async getSettings(enterpriseId: string): Promise<SocialSettings> {
+    const res = await api.get<SocialSettings>(`/social/settings/${enterpriseId}`);
+    return res.data;
+  },
+
+  async updateSettings(enterpriseId: string, data: Partial<SocialSettings>): Promise<SocialSettings> {
+    const res = await api.put<SocialSettings>(`/social/settings/${enterpriseId}`, data);
     return res.data;
   },
 };

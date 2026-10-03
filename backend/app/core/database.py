@@ -36,6 +36,15 @@ def create_db_and_tables() -> None:
             "ALTER TABLE chats ALTER COLUMN enterprise_id DROP NOT NULL;",
             "ALTER TABLE chats ALTER COLUMN name DROP NOT NULL;",
             "ALTER TABLE messages ALTER COLUMN enterprise_id DROP NOT NULL;",
+            # Social post workflow fields
+            "ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS needs_edit BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS edit_notes TEXT;",
+            "ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS edit_example_url VARCHAR;",
+            "ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS edit_requested_by_id VARCHAR;",
+            "ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS edit_requested_by_name VARCHAR;",
+            "ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS approved_by_id VARCHAR;",
+            "ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS approved_by_name VARCHAR;",
+            "ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;",
         ]
         for sql in migrations:
             try:
