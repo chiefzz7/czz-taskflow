@@ -37,11 +37,11 @@ const PERMISSION_KEYS = [
 type PermissionKey = typeof PERMISSION_KEYS[number];
 
 const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
-  can_move_to_producao: 'Define quem pode mover uma ideia para o est�gio de produ��o de arte. Deixe em "Qualquer membro" para que qualquer um possa iniciar a produ��o.',
-  can_move_to_revisao: 'Define quem pode enviar um post para revis�o/aprova��o. Geralmente o designer ou criador da arte.',
-  can_approve: 'Quem pode aprovar uma arte e marc�-la como Pronta / Agendada. Recomendado: apenas gerentes e gestores.',
-  can_mark_posted: 'Quem pode marcar um post como efetivamente Postado. Geralmente o respons�vel pelo gerenciamento de m�dias.',
-  can_request_edit: 'Quem pode solicitar altera��es em uma arte com notas detalhadas. Deixe em "Qualquer membro" para feedback aberto.',
+  can_move_to_producao: 'Define quem pode mover uma ideia para o estágio de produção de arte. Deixe em "Qualquer membro" para que qualquer um possa iniciar a produção.',
+  can_move_to_revisao: 'Define quem pode enviar um post para revisão/aprovação. Geralmente o designer ou criador da arte.',
+  can_approve: 'Quem pode aprovar uma arte e marcá-la como Pronta / Agendada. Recomendado: apenas gerentes e gestores.',
+  can_mark_posted: 'Quem pode marcar um post como efetivamente Postado. Geralmente o responsável pelo gerenciamento de mídias.',
+  can_request_edit: 'Quem pode solicitar alterações em uma arte com notas detalhadas. Deixe em "Qualquer membro" para feedback aberto.',
 };
 
 export default function SocialSettingsPage({ enterpriseId }: SocialSettingsPageProps) {
@@ -83,7 +83,7 @@ export default function SocialSettingsPage({ enterpriseId }: SocialSettingsPageP
       });
       setActivePlatforms(settingsData.active_platforms ?? Object.keys(PLATFORM_INFO));
     } catch {
-      setError('Falha ao carregar configura��es');
+      setError('Falha ao carregar configurações');
     } finally {
       setLoading(false);
     }
@@ -95,7 +95,7 @@ export default function SocialSettingsPage({ enterpriseId }: SocialSettingsPageP
     setPermissions(prev => {
       const current = prev[key];
       if (current === null) {
-        // Was "qualquer um" � restrict to just this role
+        // Was "qualquer um"  restrict to just this role
         return { ...prev, [key]: [roleId] };
       }
       if (current.includes(roleId)) {
@@ -134,7 +134,7 @@ export default function SocialSettingsPage({ enterpriseId }: SocialSettingsPageP
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch {
-      setError('Falha ao salvar configura��es');
+      setError('Falha ao salvar configurações');
     } finally {
       setSaving(false);
     }
@@ -155,10 +155,10 @@ export default function SocialSettingsPage({ enterpriseId }: SocialSettingsPageP
         <div>
           <h2 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Settings size={17} className="text-indigo-600 dark:text-indigo-400" />
-            Configura��es de Redes Sociais
+            Configurações de Redes Sociais
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Defina quais cargos podem realizar cada a��o no workflow de publica��o
+            Defina quais cargos podem realizar cada ação no workflow de publicação
           </p>
         </div>
         <button
@@ -173,7 +173,7 @@ export default function SocialSettingsPage({ enterpriseId }: SocialSettingsPageP
           ) : (
             <Save size={14} />
           )}
-          {saved ? 'Salvo!' : saving ? 'Salvando...' : 'Salvar Configura��es'}
+          {saved ? 'Salvo!' : saving ? 'Salvando...' : 'Salvar Configurações'}
         </button>
       </div>
 
@@ -205,7 +205,7 @@ export default function SocialSettingsPage({ enterpriseId }: SocialSettingsPageP
         {expandedSection === 'platforms' && (
           <div className="px-5 pb-5 border-t border-gray-100 dark:border-gray-800">
             <p className="text-xs text-gray-500 dark:text-gray-400 pt-4 pb-3">
-              Selecione quais redes sociais ser�o exibidas nas op��es de publica��o desta empresa.
+              Selecione quais redes sociais serão exibidas nas opções de publicação desta empresa.
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {Object.entries(PLATFORM_INFO).map(([key, info]) => {
@@ -245,8 +245,8 @@ export default function SocialSettingsPage({ enterpriseId }: SocialSettingsPageP
               <Shield size={16} />
             </div>
             <div>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Permiss�es de Workflow</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Controle quem pode realizar cada a��o no fluxo de publica��o</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Permissões de Workflow</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Controle quem pode realizar cada ação no fluxo de publicação</p>
             </div>
           </div>
           {expandedSection === 'permissions' ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
@@ -258,14 +258,14 @@ export default function SocialSettingsPage({ enterpriseId }: SocialSettingsPageP
               <div className="p-5 flex items-center gap-3 bg-amber-50 dark:bg-amber-950/20">
                 <Info size={16} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
                 <p className="text-xs text-amber-700 dark:text-amber-300">
-                  Nenhum cargo personalizado foi criado ainda. Crie cargos na aba "Empresa" para configurar permiss�es granulares.
-                  Por enquanto, todas as a��es est�o liberadas para qualquer membro.
+                  Nenhum cargo personalizado foi criado ainda. Crie cargos na aba "Empresa" para configurar permissões granulares.
+                  Por enquanto, todas as ações estão liberadas para qualquer membro.
                 </p>
               </div>
             )}
 
             {PERMISSION_KEYS.map((key) => {
-              const currentRoles = permissions[key]; // null = todos, [] = ningu�m, [...] = s� esses
+              const currentRoles = permissions[key]; // null = todos, [] = ninguém, [...] = só esses
               const isAll = currentRoles === null;
               const isNone = Array.isArray(currentRoles) && currentRoles.length === 0;
 
@@ -304,7 +304,7 @@ export default function SocialSettingsPage({ enterpriseId }: SocialSettingsPageP
                           ? 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300'
                           : 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
                     )}>
-                      {isAll ? 'Qualquer Membro' : isNone ? 'Ningu�m' : `${currentRoles!.length} cargo(s) selecionado(s)`}
+                      {isAll ? 'Qualquer Membro' : isNone ? 'Ninguém' : `${currentRoles!.length} cargo(s) selecionado(s)`}
                     </span>
                     {!isAll && (
                       <button
@@ -356,12 +356,12 @@ export default function SocialSettingsPage({ enterpriseId }: SocialSettingsPageP
       <div className="flex gap-3 p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-xl text-xs text-blue-700 dark:text-blue-300">
         <Info size={14} className="flex-shrink-0 mt-0.5 text-blue-500" />
         <div className="space-y-1.5">
-          <p className="font-semibold">Como funcionam as permiss�es de workflow:</p>
+          <p className="font-semibold">Como funcionam as permissões de workflow:</p>
           <ul className="space-y-1 text-blue-600 dark:text-blue-400">
-            <li>� <strong>Qualquer membro</strong>: a a��o fica dispon�vel para todos os membros da empresa</li>
-            <li>� <strong>Cargos selecionados</strong>: apenas membros com aquele cargo personalizado podem realizar a a��o</li>
-            <li>� <strong>Ningu�m</strong>: a a��o fica desabilitada para todos (exceto administradores)</li>
-            <li>� Administradores (<strong>admin</strong>) sempre podem realizar todas as a��es</li>
+            <li>• <strong>Qualquer membro</strong>: a ação fica disponível para todos os membros da empresa</li>
+            <li>• <strong>Cargos selecionados</strong>: apenas membros com aquele cargo personalizado podem realizar a ação</li>
+            <li>• <strong>Ninguém</strong>: a ação fica desabilitada para todos (exceto administradores)</li>
+            <li>• Administradores (<strong>admin</strong>) sempre podem realizar todas as ações</li>
           </ul>
         </div>
       </div>
