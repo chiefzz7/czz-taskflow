@@ -99,3 +99,23 @@ class Reminder(SQLModel, table=True):
     channel: ReminderChannel = Field(default=ReminderChannel.in_app)
     sent: bool = Field(default=False)
     created_at: datetime = Field(default_factory=utcnow)
+
+
+class TaskSettings(SQLModel, table=True):
+    """Configurações e permissões de workflow de tarefas por empresa."""
+
+    __tablename__ = "task_settings"
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    enterprise_id: str = Field(foreign_key="enterprises.id", unique=True, index=True)
+
+    # Permissões: JSON array de custom_role_ids. None = qualquer membro pode. [] = apenas gestores/admins.
+    can_create_task: Optional[str] = Field(default=None)
+    can_delegate_task: Optional[str] = Field(default=None)
+    can_move_to_in_progress: Optional[str] = Field(default=None)
+    can_move_to_review: Optional[str] = Field(default=None)
+    can_finalize_task: Optional[str] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+

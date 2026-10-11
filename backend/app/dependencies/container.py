@@ -31,7 +31,12 @@ social_repo = SQLSocialRepository()
 # ── Services ─────────────────────────────────────────────────────────────────
 recurrence_service = RecurrenceService()
 auth_service = AuthService(user_repo=user_repo)
-task_service = TaskService(task_repo=task_repo, recurrence_service=recurrence_service)
+task_service = TaskService(
+    task_repo=task_repo,
+    recurrence_service=recurrence_service,
+    enterprise_repo=enterprise_repo,
+    user_repo=user_repo,
+)
 enterprise_service = EnterpriseService(enterprise_repo=enterprise_repo, user_repo=user_repo)
 dashboard_service = DashboardService(task_repo=task_repo, enterprise_repo=enterprise_repo, user_repo=user_repo)
 report_service = ReportService(task_repo=task_repo)

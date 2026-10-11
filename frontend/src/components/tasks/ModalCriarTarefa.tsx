@@ -1,11 +1,13 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   X, AlertCircle, Repeat, Calendar as CalendarIcon,
-  Clock, Check, Sparkles
+  Clock, Check, Sparkles, User
 } from 'lucide-react';
 import { taskService } from '../../services/taskService';
+import { enterpriseService } from '../../services/enterpriseService';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import type { Task, RecurrenceType, TaskPriority } from '../../types/task';
+import type { EnterpriseMember } from '../../types/enterprise';
 import { TASK_PRIORITY_LABELS } from '../../types/task';
 import { cn } from '../../utils/cn';
 
@@ -33,8 +35,18 @@ export default function ModalCriarTarefa({ onClose, onCriada, dataInicial }: Mod
   const [descricao, setDescricao] = useState('');
   const [prioridade, setPrioridade] = useState<TaskPriority>('medium');
   const [vencimento, setVencimento] = useState(dataInicial || '');
+  const [responsavelId, setResponsavelId] = useState('');
+  const [members, setMembers] = useState<EnterpriseMember[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
+
+  useEffect(() => {
+    if (!isPersonal && currentEnterpriseId) {
+      enterpriseService.listMembers(currentEnterpriseId)
+        .then(setMembers)
+        .catch(() => {});
+    }
+  }, [isPersonal, currentEnterpriseId]);
 
   // Recurrence fields
   const [isRecorrente, setIsRecorrente] = useState(false);
@@ -142,6 +154,8 @@ export default function ModalCriarTarefa({ onClose, onCriada, dataInicial }: Mod
         due_at: vencimento ? (vencimento.includes('T') ? new Date(vencimento).toISOString() : new Date(vencimento + 'T12:00:00').toISOString()) : null,
         workspace: isPersonal ? ('personal' as const) : ('enterprise' as const),
         enterprise_id: isPersonal ? null : currentEnterpriseId,
+        responsible_id: isPersonal ? null : (responsavelId || null),
+        assignee_ids: isPersonal ? [] : (responsavelId ? [responsavelId] : []),
         recurrence: recurrencePayload,
       };
 
@@ -263,6 +277,32 @@ export default function ModalCriarTarefa({ onClose, onCriada, dataInicial }: Mod
               />
             </div>
           </div>
+
+          {/* Responsável / Delegar Tarefa (Apenas Empresa) */}
+          {!isPersonal && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1.5">
+                <User size={13} className="text-indigo-500" />
+                Responsável / Delegar Para
+              </label>
+              <select
+                value={responsavelId}
+                onChange={(e) => setResponsavelId(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+              >
+                <option value="">Nenhum responsável definido (Geral)</option>
+                {members.map((m) => {
+                  const nome = m.user?.name || m.user?.email || 'Membro';
+                  const cargo = m.custom_role?.name || m.job_title || (m.role === 'admin' ? 'Administrador' : m.role === 'manager' ? 'Gestor' : 'Membro');
+                  return (
+                    <option key={m.user_id} value={m.user_id}>
+                      {nome} ({cargo})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
 
           {/* ══════════ RECURRENCE ACCORDION / TOGGLE ══════════ */}
           <div className="pt-2 border-t border-gray-200 dark:border-gray-800">

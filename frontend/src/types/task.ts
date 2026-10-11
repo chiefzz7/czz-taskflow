@@ -24,6 +24,8 @@ export interface Task {
   enterprise_id: string | null;
   creator_id: string;
   responsible_id: string | null;
+  responsible_name?: string | null;
+  responsible_email?: string | null;
   is_public: boolean;
   planned_start_at: string | null;
   started_at: string | null;
@@ -32,6 +34,7 @@ export interface Task {
   created_at: string;
   updated_at: string;
   assignee_ids: string[];
+  assignee_names?: string[];
   recurrence: Recurrence | null;
   // Optional flag for virtual calendar occurrences
   is_recurrence_instance?: boolean;
@@ -46,6 +49,7 @@ export interface TaskCreate {
   workspace?: WorkspaceType;
   enterprise_id?: string | null;
   responsible_id?: string | null;
+  assignee_ids?: string[];
   is_public?: boolean;
   planned_start_at?: string | null;
   due_at?: string | null;
@@ -66,11 +70,30 @@ export interface TaskUpdate {
   status?: TaskStatus;
   priority?: TaskPriority;
   responsible_id?: string | null;
+  assignee_ids?: string[];
   is_public?: boolean;
   planned_start_at?: string | null;
   due_at?: string | null;
   recurrence?: TaskCreate['recurrence'];
   remove_recurrence?: boolean;
+}
+
+export interface TaskSettings {
+  enterprise_id: string;
+  can_create_task: string[] | null;
+  can_delegate_task: string[] | null;
+  can_move_to_in_progress: string[] | null;
+  can_move_to_review: string[] | null;
+  can_finalize_task: string[] | null;
+  updated_at?: string | null;
+}
+
+export interface TaskSettingsUpdate {
+  can_create_task?: string[] | null;
+  can_delegate_task?: string[] | null;
+  can_move_to_in_progress?: string[] | null;
+  can_move_to_review?: string[] | null;
+  can_finalize_task?: string[] | null;
 }
 
 export interface TaskFilters {

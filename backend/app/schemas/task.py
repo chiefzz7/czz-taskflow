@@ -42,6 +42,7 @@ class TaskCreate(BaseModel):
     workspace: WorkspaceType = WorkspaceType.personal
     enterprise_id: Optional[str] = None
     responsible_id: Optional[str] = None
+    assignee_ids: Optional[List[str]] = None
     is_public: bool = False
     planned_start_at: Optional[datetime] = None
     due_at: Optional[datetime] = None
@@ -55,6 +56,7 @@ class TaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
     priority: Optional[TaskPriority] = None
     responsible_id: Optional[str] = None
+    assignee_ids: Optional[List[str]] = None
     is_public: Optional[bool] = None
     planned_start_at: Optional[datetime] = None
     due_at: Optional[datetime] = None
@@ -77,6 +79,8 @@ class TaskRead(BaseModel):
     enterprise_id: Optional[str]
     creator_id: str
     responsible_id: Optional[str]
+    responsible_name: Optional[str] = None
+    responsible_email: Optional[str] = None
     is_public: bool
     planned_start_at: Optional[datetime]
     started_at: Optional[datetime]
@@ -85,6 +89,7 @@ class TaskRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     assignee_ids: List[str] = []
+    assignee_names: List[str] = []
     recurrence: Optional[RecurrenceRead] = None
 
     class Config:
@@ -97,3 +102,23 @@ class TaskFilters(BaseModel):
     search: Optional[str] = None
     enterprise_id: Optional[str] = None
     workspace: Optional[WorkspaceType] = None
+
+
+# ── Task Settings (Workflow) ─────────────────────────────────────────────────
+
+class TaskSettingsUpdate(BaseModel):
+    can_create_task: Optional[List[str]] = None
+    can_delegate_task: Optional[List[str]] = None
+    can_move_to_in_progress: Optional[List[str]] = None
+    can_move_to_review: Optional[List[str]] = None
+    can_finalize_task: Optional[List[str]] = None
+
+
+class TaskSettingsRead(BaseModel):
+    enterprise_id: str
+    can_create_task: Optional[List[str]] = None
+    can_delegate_task: Optional[List[str]] = None
+    can_move_to_in_progress: Optional[List[str]] = None
+    can_move_to_review: Optional[List[str]] = None
+    can_finalize_task: Optional[List[str]] = None
+    updated_at: Optional[datetime] = None

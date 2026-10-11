@@ -45,6 +45,9 @@ def create_db_and_tables() -> None:
             "ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS approved_by_id VARCHAR;",
             "ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS approved_by_name VARCHAR;",
             "ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;",
+            # Task workflow and responsibles
+            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS responsible_id VARCHAR;",
+            "CREATE TABLE IF NOT EXISTS task_settings (id VARCHAR PRIMARY KEY, enterprise_id VARCHAR UNIQUE, can_create_task VARCHAR, can_delegate_task VARCHAR, can_move_to_in_progress VARCHAR, can_move_to_review VARCHAR, can_finalize_task VARCHAR, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);",
         ]
         for sql in migrations:
             try:

@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime, timezone
 import json
 
@@ -6,20 +6,39 @@ from fastapi import HTTPException, status
 
 from app.core.cache import cache
 from app.repositories.task_repository import TaskRepository
-from app.models.task import Task, TaskAssignee, Recurrence
-from app.models.enums import TaskStatus, WorkspaceType
-from app.schemas.task import TaskCreate, TaskUpdate, TaskStatusUpdate, TaskRead, RecurrenceCreate
+from app.models.task import Task, TaskAssignee, Recurrence, TaskSettings
+from app.models.enums import TaskStatus, WorkspaceType, EnterpriseRole
+from app.schemas.task import (
+    TaskCreate, TaskUpdate, TaskStatusUpdate, TaskRead, RecurrenceCreate,
+    TaskSettingsUpdate, TaskSettingsRead,
+)
 from app.services.recurrence_service import RecurrenceService
 
 
 class TaskService:
-    def __init__(self, task_repo: TaskRepository, recurrence_service: Optional[RecurrenceService] = None) -> None:
+    def __init__(
+        self,
+        task_repo: TaskRepository,
+        recurrence_service: Optional[RecurrenceService] = None,
+        enterprise_repo: Optional[Any] = None,
+        user_repo: Optional[Any] = None,
+    ) -> None:
         self._repo = task_repo
         self._recurrence_service = recurrence_service or RecurrenceService()
+        self._enterprise_repo = enterprise_repo
+        self._user_repo = user_repo
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
-    def _build_task_read(self, task: Task, assignees: List[TaskAssignee], recurrence: Optional[Recurrence] = None) -> TaskRead:
+    def _build_task_read(
+        self,
+        task: Task,
+        assignees: List[TaskAssignee],
+        recurrence: Optional[Recurrence] = None,
+        responsible_name: Optional[str] = None,
+        responsible_email: Optional[str] = None,
+        assignee_names: Optional[List[str]] = None,
+    ) -> TaskRead:
         from app.schemas.task import RecurrenceRead
         import json
 
@@ -58,6 +77,8 @@ class TaskService:
             enterprise_id=task.enterprise_id,
             creator_id=task.creator_id,
             responsible_id=task.responsible_id,
+            responsible_name=responsible_name,
+            responsible_email=responsible_email,
             is_public=task.is_public,
             planned_start_at=task.planned_start_at,
             started_at=task.started_at,
@@ -66,15 +87,13 @@ class TaskService:
             created_at=task.created_at,
             updated_at=task.updated_at,
             assignee_ids=[a.user_id for a in assignees],
+            assignee_names=assignee_names or [],
             recurrence=rec_read,
         )
 
     async def _get_task_read(self, task: Task) -> TaskRead:
-        assignees = await self._repo.get_assignees(task.id)
-        recurrence = None
-        if task.recurrence_id:
-            recurrence = await self._repo.get_recurrence(task.recurrence_id)
-        return self._build_task_read(task, assignees, recurrence)
+        reads = await self._batch_load_task_reads([task])
+        return reads[0]
 
     async def _batch_load_task_reads(self, tasks: List[Task]) -> List[TaskRead]:
         if not tasks:
@@ -90,12 +109,164 @@ class TaskService:
         if rec_ids:
             recs_map = await self._repo.get_recurrences_batch(rec_ids)
 
+        # 1 single query for users (responsible + assignees)
+        users_map = {}
+        if self._user_repo:
+            all_user_ids = set()
+            for t in tasks:
+                if t.responsible_id:
+                    all_user_ids.add(t.responsible_id)
+                for a in assignees_map.get(t.id, []):
+                    all_user_ids.add(a.user_id)
+            if all_user_ids:
+                try:
+                    users_map = await self._user_repo.get_by_ids(list(all_user_ids))
+                except Exception:
+                    users_map = {}
+
         result = []
         for task in tasks:
             assignees = assignees_map.get(task.id, [])
             rec = recs_map.get(task.recurrence_id) if task.recurrence_id else None
-            result.append(self._build_task_read(task, assignees, rec))
+            resp_user = users_map.get(task.responsible_id) if task.responsible_id else None
+            assignee_names = [
+                users_map[a.user_id].name
+                for a in assignees
+                if a.user_id in users_map and users_map[a.user_id] and users_map[a.user_id].name
+            ]
+            result.append(
+                self._build_task_read(
+                    task,
+                    assignees,
+                    rec,
+                    responsible_name=resp_user.name if resp_user else None,
+                    responsible_email=resp_user.email if resp_user else None,
+                    assignee_names=assignee_names,
+                )
+            )
         return result
+
+    # ── Workflow Settings & Permissions ─────────────────────────────────────
+
+    async def get_settings(self, enterprise_id: str) -> dict:
+        settings = await self._repo.get_settings(enterprise_id)
+        if not settings:
+            return {
+                "enterprise_id": enterprise_id,
+                "can_create_task": None,
+                "can_delegate_task": None,
+                "can_move_to_in_progress": None,
+                "can_move_to_review": None,
+                "can_finalize_task": None,
+                "updated_at": None,
+            }
+
+        def parse_json_roles(val: Optional[str]) -> Optional[List[str]]:
+            if val is None:
+                return None
+            try:
+                return json.loads(val)
+            except Exception:
+                return []
+
+        return {
+            "enterprise_id": enterprise_id,
+            "can_create_task": parse_json_roles(settings.can_create_task),
+            "can_delegate_task": parse_json_roles(settings.can_delegate_task),
+            "can_move_to_in_progress": parse_json_roles(settings.can_move_to_in_progress),
+            "can_move_to_review": parse_json_roles(settings.can_move_to_review),
+            "can_finalize_task": parse_json_roles(settings.can_finalize_task),
+            "updated_at": settings.updated_at,
+        }
+
+    async def update_settings(self, enterprise_id: str, data: TaskSettingsUpdate, requesting_user_id: str) -> dict:
+        if self._enterprise_repo:
+            member = await self._enterprise_repo.get_member(enterprise_id, requesting_user_id)
+            if not member or member.role not in [EnterpriseRole.admin, EnterpriseRole.manager]:
+                raise HTTPException(status_code=403, detail="Apenas administradores e gestores podem alterar as permissões de tarefas.")
+
+        settings = await self._repo.get_settings(enterprise_id)
+        if not settings:
+            settings = TaskSettings(enterprise_id=enterprise_id)
+
+        def dump_json_roles(val: Optional[List[str]]) -> Optional[str]:
+            if val is None:
+                return None
+            return json.dumps(val)
+
+        settings.can_create_task = dump_json_roles(data.can_create_task)
+        settings.can_delegate_task = dump_json_roles(data.can_delegate_task)
+        settings.can_move_to_in_progress = dump_json_roles(data.can_move_to_in_progress)
+        settings.can_move_to_review = dump_json_roles(data.can_move_to_review)
+        settings.can_finalize_task = dump_json_roles(data.can_finalize_task)
+        settings.updated_at = datetime.now(timezone.utc)
+
+        await self._repo.save_settings(settings)
+        return await self.get_settings(enterprise_id)
+
+    async def _check_status_permission(
+        self,
+        task: Task,
+        target_status: TaskStatus,
+        user_id: str,
+    ) -> None:
+        if task.workspace != WorkspaceType.enterprise or not task.enterprise_id:
+            return
+        if not self._enterprise_repo:
+            return
+
+        member = await self._enterprise_repo.get_member(task.enterprise_id, user_id)
+        if not member:
+            raise HTTPException(status_code=403, detail="Você não é membro desta empresa")
+
+        if member.role == EnterpriseRole.admin:
+            return
+
+        settings = await self._repo.get_settings(task.enterprise_id)
+        assignees = await self._repo.get_assignees(task.id)
+        is_assigned = task.responsible_id == user_id or any(a.user_id == user_id for a in assignees)
+        is_creator = task.creator_id == user_id
+        is_manager = member.role == EnterpriseRole.manager
+
+        def is_role_allowed(setting_str: Optional[str]) -> bool:
+            if setting_str is None:
+                return True
+            try:
+                allowed_ids = json.loads(setting_str)
+                if not allowed_ids:
+                    return is_manager
+                return bool(member.custom_role_id and member.custom_role_id in allowed_ids)
+            except Exception:
+                return True
+
+        if target_status == TaskStatus.in_progress:
+            if not is_assigned and not is_manager:
+                if not is_role_allowed(settings.can_move_to_in_progress if settings else None):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Seu cargo não tem permissão para mover esta tarefa para 'Em Andamento'."
+                    )
+
+        elif target_status == TaskStatus.review:
+            if not is_assigned and not is_creator and not is_manager:
+                if not is_role_allowed(settings.can_move_to_review if settings else None):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Seu cargo não tem permissão para enviar tarefas para Revisão."
+                    )
+
+        elif target_status == TaskStatus.done:
+            allowed = False
+            if settings and settings.can_finalize_task is not None:
+                allowed = is_role_allowed(settings.can_finalize_task)
+            else:
+                allowed = is_manager
+
+            if not allowed:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Apenas gestores ou cargos autorizados podem definir a tarefa como Finalizada. Mova para 'Revisão' para aprovação do gestor."
+                )
 
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
@@ -103,6 +274,34 @@ class TaskService:
         if data.workspace == WorkspaceType.personal:
             data.enterprise_id = None
             data.is_public = False
+        elif data.workspace == WorkspaceType.enterprise and data.enterprise_id and self._enterprise_repo:
+            member = await self._enterprise_repo.get_member(data.enterprise_id, creator_id)
+            if not member:
+                raise HTTPException(status_code=403, detail="Você não é membro desta empresa")
+            settings = await self._repo.get_settings(data.enterprise_id)
+
+            if member.role != EnterpriseRole.admin and settings and settings.can_create_task is not None:
+                try:
+                    allowed = json.loads(settings.can_create_task)
+                    if allowed and (not member.custom_role_id or member.custom_role_id not in allowed) and member.role != EnterpriseRole.manager:
+                        raise HTTPException(status_code=403, detail="Seu cargo não tem permissão para criar tarefas nesta empresa.")
+                except Exception:
+                    pass
+
+            is_delegating = False
+            if data.responsible_id and data.responsible_id != creator_id:
+                is_delegating = True
+            if data.assignee_ids and any(aid != creator_id for aid in data.assignee_ids):
+                is_delegating = True
+
+            if is_delegating and member.role != EnterpriseRole.admin:
+                if settings and settings.can_delegate_task is not None:
+                    try:
+                        allowed = json.loads(settings.can_delegate_task)
+                        if allowed and (not member.custom_role_id or member.custom_role_id not in allowed) and member.role != EnterpriseRole.manager:
+                            raise HTTPException(status_code=403, detail="Apenas cargos autorizados podem delegar tarefas a outros membros.")
+                    except Exception:
+                        pass
 
         recurrence_id = None
         if data.recurrence:
@@ -133,6 +332,14 @@ class TaskService:
             recurrence_id=recurrence_id,
         )
         saved = await self._repo.save(task)
+
+        # Save assignees
+        target_assignees = set(data.assignee_ids or [])
+        if data.responsible_id:
+            target_assignees.add(data.responsible_id)
+        for uid in target_assignees:
+            await self._repo.add_assignee(TaskAssignee(task_id=saved.id, user_id=uid))
+
         cache.invalidate_prefix("dash:")
         cache.invalidate_prefix("tasks:")
         return await self._get_task_read(saved)
@@ -208,8 +415,12 @@ class TaskService:
             if task.creator_id != user_id:
                 raise HTTPException(status_code=403, detail="Acesso negado. Esta tarefa pessoal é estritamente privada.")
         else:
-            if task.creator_id != user_id and task.responsible_id != user_id:
-                raise HTTPException(status_code=403, detail="Access denied")
+            if self._enterprise_repo and task.enterprise_id:
+                member = await self._enterprise_repo.get_member(task.enterprise_id, user_id)
+                if not member:
+                    raise HTTPException(status_code=403, detail="Access denied")
+                if member.role not in [EnterpriseRole.admin, EnterpriseRole.manager] and task.creator_id != user_id and task.responsible_id != user_id:
+                    raise HTTPException(status_code=403, detail="Access denied")
 
         if data.remove_recurrence:
             task.recurrence_id = None
@@ -256,6 +467,21 @@ class TaskService:
             task.is_public = False
 
         saved = await self._repo.save(task)
+
+        # Sync assignees if provided
+        if data.assignee_ids is not None:
+            current_assignees = await self._repo.get_assignees(task.id)
+            current_ids = {a.user_id for a in current_assignees}
+            new_ids = set(data.assignee_ids)
+            if data.responsible_id:
+                new_ids.add(data.responsible_id)
+            for cid in current_ids:
+                if cid not in new_ids:
+                    await self._repo.remove_assignee(task.id, cid)
+            for nid in new_ids:
+                if nid not in current_ids:
+                    await self._repo.add_assignee(TaskAssignee(task_id=task.id, user_id=nid))
+
         cache.invalidate_prefix("dash:")
         cache.invalidate_prefix("tasks:")
         return await self._get_task_read(saved)
@@ -315,15 +541,12 @@ class TaskService:
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
 
-        # Check access
+        # Check access and role workflow permission
         if task.workspace == WorkspaceType.personal:
             if task.creator_id != user_id:
                 raise HTTPException(status_code=403, detail="Acesso negado. Esta tarefa pessoal é estritamente privada.")
         else:
-            assignees = await self._repo.get_assignees(task_id)
-            is_assignee = any(a.user_id == user_id for a in assignees)
-            if task.creator_id != user_id and task.responsible_id != user_id and not is_assignee:
-                raise HTTPException(status_code=403, detail="Access denied")
+            await self._check_status_permission(task, data.status, user_id)
 
         was_done = task.status == TaskStatus.done
         task.status = data.status

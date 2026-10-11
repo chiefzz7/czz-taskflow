@@ -7,7 +7,10 @@ from app.schemas.enterprise import (
     MemberRead, MemberInvite, MemberRoleUpdate, EnterpriseInvitationRead,
     InviteCodeResponse,
 )
-from app.schemas.task import TaskCreate, TaskUpdate, TaskStatusUpdate, TaskRead
+from app.schemas.task import (
+    TaskCreate, TaskUpdate, TaskStatusUpdate, TaskRead,
+    TaskSettingsUpdate, TaskSettingsRead,
+)
 from app.schemas.chat import ChatCreate, ChatRead, MessageRead
 from app.models.user import User
 from app.models.enums import TaskStatus, EnterpriseRole
@@ -213,6 +216,23 @@ async def create_enterprise_task(
     from app.models.enums import WorkspaceType
     data.workspace = WorkspaceType.enterprise
     return await task_service.create_task(data=data, creator_id=current_user.id)
+
+
+@router.get("/{enterprise_id}/tasks/settings", response_model=TaskSettingsRead)
+async def get_task_settings(
+    enterprise_id: str,
+    current_user: User = Depends(get_current_user),
+) -> TaskSettingsRead:
+    return await task_service.get_settings(enterprise_id)
+
+
+@router.put("/{enterprise_id}/tasks/settings", response_model=TaskSettingsRead)
+async def update_task_settings(
+    enterprise_id: str,
+    data: TaskSettingsUpdate,
+    current_user: User = Depends(get_current_user),
+) -> TaskSettingsRead:
+    return await task_service.update_settings(enterprise_id, data, current_user.id)
 
 
 # ── Enterprise Chat ───────────────────────────────────────────────────────────

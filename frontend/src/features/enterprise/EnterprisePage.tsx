@@ -20,6 +20,7 @@ import ModalConvidarMembro from '../../components/enterprise/ModalConvidarMembro
 import ModalEditarMembro from '../../components/enterprise/ModalEditarMembro';
 import ModalCargo from '../../components/enterprise/ModalCargo';
 import ModalEntrarEmpresa from '../../components/enterprise/ModalEntrarEmpresa';
+import ModalPermissoesTarefas from '../../components/tasks/ModalPermissoesTarefas';
 import { cn } from '../../utils/cn';
 
 const roleBadgeStyles: Record<string, string> = {
@@ -46,6 +47,7 @@ export default function EnterprisePage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showCargoModal, setShowCargoModal] = useState(false);
+  const [showWorkflowModal, setShowWorkflowModal] = useState(false);
   const [cargoToEdit, setCargoToEdit] = useState<EnterpriseCustomRole | null>(null);
   const [memberToEdit, setMemberToEdit] = useState<EnterpriseMember | null>(null);
 
@@ -260,6 +262,14 @@ export default function EnterprisePage() {
               >
                 <UserPlus size={15} />
                 Convidar Pessoas
+              </button>
+
+              <button
+                onClick={() => setShowWorkflowModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 dark:hover:bg-violet-900/60 border border-violet-200 dark:border-violet-800 rounded-xl transition-all shadow-xs"
+              >
+                <Shield size={15} />
+                Permissões de Tarefas
               </button>
             </>
           )}
@@ -851,6 +861,17 @@ export default function EnterprisePage() {
             setEnterprise(ent);
             setSuccessNotice(`Você entrou na empresa ${ent.name}!`);
             loadEnterprises();
+          }}
+        />
+      )}
+
+      {showWorkflowModal && activeEnterprise && (
+        <ModalPermissoesTarefas
+          enterpriseId={activeEnterprise.id}
+          onClose={() => setShowWorkflowModal(false)}
+          onSaved={() => {
+            setSuccessNotice('Permissões de tarefas salvas com sucesso!');
+            setTimeout(() => setSuccessNotice(''), 3000);
           }}
         />
       )}

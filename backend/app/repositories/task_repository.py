@@ -2,7 +2,7 @@ from typing import Optional, List, Dict
 from datetime import datetime, timezone
 
 from app.repositories.base import BaseRepository
-from app.models.task import Task, TaskAssignee, TaskViewer, Recurrence, Reminder
+from app.models.task import Task, TaskAssignee, TaskViewer, Recurrence, Reminder, TaskSettings
 from app.models.enums import TaskStatus, TaskPriority, WorkspaceType
 
 
@@ -21,6 +21,8 @@ class TaskRepository(BaseRepository[Task]):
     async def save_recurrence(self, recurrence: Recurrence) -> Recurrence: ...
     async def get_recurrence(self, recurrence_id: str) -> Optional[Recurrence]: ...
     async def get_recurrences_batch(self, recurrence_ids: List[str]) -> Dict[str, Recurrence]: ...
+    async def get_settings(self, enterprise_id: str) -> Optional[TaskSettings]: ...
+    async def save_settings(self, settings: TaskSettings) -> TaskSettings: ...
 
 
 class InMemoryTaskRepository(TaskRepository):
@@ -30,6 +32,7 @@ class InMemoryTaskRepository(TaskRepository):
         self._tasks: Dict[str, Task] = {}
         self._assignees: Dict[str, List[TaskAssignee]] = {}  # task_id → assignees
         self._recurrences: Dict[str, Recurrence] = {}
+        self._settings: Dict[str, TaskSettings] = {}
 
     async def get_by_id(self, id: str) -> Optional[Task]:
         return self._tasks.get(id)
@@ -103,6 +106,13 @@ class InMemoryTaskRepository(TaskRepository):
 
     async def get_recurrences_batch(self, recurrence_ids: List[str]) -> Dict[str, Recurrence]:
         return {rid: self._recurrences[rid] for rid in recurrence_ids if rid in self._recurrences}
+
+    async def get_settings(self, enterprise_id: str) -> Optional[TaskSettings]:
+        return self._settings.get(enterprise_id)
+
+    async def save_settings(self, settings: TaskSettings) -> TaskSettings:
+        self._settings[settings.enterprise_id] = settings
+        return settings
 
 
 class SQLTaskRepository(TaskRepository):
@@ -256,4 +266,18 @@ class SQLTaskRepository(TaskRepository):
             statement = select(Recurrence).where(Recurrence.id.in_(recurrence_ids))
             recs = list(session.exec(statement).all())
             return {r.id: r for r in recs}
+
+    async def get_settings(self, enterprise_id: str) -> Optional[TaskSettings]:
+        from sqlmodel import Session, select
+        with Session(self.engine) as session:
+            statement = select(TaskSettings).where(TaskSettings.enterprise_id == enterprise_id)
+            return session.exec(statement).first()
+
+    async def save_settings(self, settings: TaskSettings) -> TaskSettings:
+        from sqlmodel import Session
+        with Session(self.engine) as session:
+            merged = session.merge(settings)
+            session.commit()
+            session.refresh(merged)
+            return merged
 

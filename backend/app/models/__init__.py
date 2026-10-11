@@ -1,5 +1,5 @@
 from app.models.user import User
-from app.models.task import Task, TaskAssignee, TaskViewer, Recurrence, Reminder
+from app.models.task import Task, TaskAssignee, TaskViewer, Recurrence, Reminder, TaskSettings
 from app.models.enterprise import Enterprise, EnterpriseMember, EnterpriseCustomRole, EnterpriseInvitation
 from app.models.chat import Chat, ChatMember, Message
 from app.models.social import SocialPost, SocialSettings
@@ -11,7 +11,7 @@ from app.models.enums import (
 
 __all__ = [
     "User",
-    "Task", "TaskAssignee", "TaskViewer", "Recurrence", "Reminder",
+    "Task", "TaskAssignee", "TaskViewer", "Recurrence", "Reminder", "TaskSettings",
     "Enterprise", "EnterpriseMember", "EnterpriseCustomRole", "EnterpriseInvitation",
     "Chat", "ChatMember", "Message",
     "SocialPost", "SocialSettings",
